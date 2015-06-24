@@ -1,0 +1,13 @@
+ * Aspen-Codes integration model
+ * Author: Mark Blanco
+ * Date: 24 June 2015
+ * Note: this model is directly based off of the codes-base example (example.c)
+ * They may look very similar for a while
+ * The CODES project can be found at http://www.mcs.anl.gov/research/projects/codes/
+ * The ROSS project, which codes is based on, can be found at 
+ * https://github.com/carothersc/ROSS/wiki
+ * Finally, ASPEN can be found at https://ft.ornl.gov/node/1566...sort of.
+
+ The purpose of this model is first for me to learn more about codes models, and secondly to begin integrating Aspen into Codes for the purposes of estimating the runtime of certain compute and network based applications on large parallel systems.
+
+ This is part of a summer research project under Dr. Chris Carothers at the Department of Computer Science at Rensselaer Polytechnic Institute.
