@@ -121,7 +121,7 @@ static void svr_add_lp_type()
     lp_type_register("server", svr_get_lp_type());
 }
 
-static void svr_init(
+static void aspen_svr_init(
     aspen_svr_state * ns,
     tw_lp * lp)
 {
