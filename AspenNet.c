@@ -10,15 +10,6 @@
  * Finally, ASPEN can be found at https://ft.ornl.gov/node/1566...sort of.
  */
 
-/* SUMMARY:
- *
- * This is a sample code to demonstrate CODES usage and best practices.  It
- * sets up a number of servers, each of which is paired up with a simplenet LP
- * to serve as the NIC.  Each server exchanges a sequence of requests and acks
- * with one peer and measures the throughput in terms of payload bytes (ack
- * size) moved per second.
- */
-
 #include <string.h>
 #include <assert.h>
 #include <ross.h>
@@ -31,157 +22,6 @@
 #include "codes/lp-type-lookup.h"
 #include "codes/local-storage-model.h"
 
-static int num_reqs = 0;/* number of requests sent by each server (read from config) */
-static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
-
-/* model-net ID, can be either simple-net, dragonfly or torus (more may be
- * added) */
-static int net_id = 0;
-static int num_servers = 0;
-static int offset = 2;
-
-/* expected LP group name in configure files for this program */
-static char *group_name = "SERVERS";
-/* expected parameter group name for rounds of communication */
-static char *param_group_nm = "server_pings";
-static char *num_reqs_key = "num_reqs";
-static char *payload_sz_key = "payload_sz";
-
-typedef struct svr_msg svr_msg;
-typedef struct svr_state svr_state;
-
-/* types of events that will constitute server activities */
-enum svr_event
-{
-    KICKOFF,    /* initial event */
-    REQ,        /* request event */
-    ACK,        /* ack event */
-    LOCAL      /* local event */
-};
-
-/* this struct serves as the ***persistent*** state of the LP representing the 
- * server in question. This struct is setup when the LP initialization function
- * ptr is called */
-struct svr_state
-{
-    int msg_sent_count;   /* requests sent */
-    int msg_recvd_count;  /* requests recvd */
-    int local_recvd_count; /* number of local messages received */
-    tw_stime start_ts;    /* time that we started sending requests */
-    tw_stime end_ts;      /* time that last request finished */
-};
-
-/* this struct serves as the ***temporary*** event data, which can be thought
- * of as a message between two LPs. */
-struct svr_msg
-{
-    enum svr_event svr_event_type;
-    tw_lpid src;          /* source of this request or ack */
-
-    int incremented_flag; /* helper for reverse computation */
-};
-
-/* ROSS expects four functions per LP:
- * - an LP initialization function, called for each LP
- * - an event processing function
- * - a *reverse* event processing function (rollback), and
- * - a finalization/cleanup function when the simulation ends
- */
-static void svr_init(
-    svr_state * ns,
-    tw_lp * lp);
-static void svr_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-    tw_lp * lp);
-static void svr_rev_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-    tw_lp * lp);
-static void svr_finalize(
-    svr_state * ns,
-    tw_lp * lp);
-
-/* set up the function pointers for ROSS, as well as the size of the LP state
- * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
-tw_lptype svr_lp = {
-    (init_f) svr_init,
-    (pre_run_f) NULL,
-    (event_f) svr_event,
-    (revent_f) svr_rev_event,
-    (final_f)  svr_finalize, 
-    (map_f) codes_mapping,
-    sizeof(svr_state),
-};
-
-extern const tw_lptype* svr_get_lp_type();
-static void svr_add_lp_type();
-static tw_stime ns_to_s(tw_stime ns);
-static tw_stime s_to_ns(tw_stime ns);
-
-/* as we only have a single event processing entry point and multiple event
- * types, for clarity we define "handlers" for each (reverse) event type */
-static void handle_kickoff_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-    tw_lp * lp);
-static void handle_ack_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-    tw_lp * lp);
-static void handle_req_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-    tw_lp * lp);
-static void handle_local_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-   tw_lp * lp);
-static void handle_local_rev_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-   tw_lp * lp);
-static void handle_kickoff_rev_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-    tw_lp * lp);
-static void handle_ack_rev_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-    tw_lp * lp);
-static void handle_req_rev_event(
-    svr_state * ns,
-    tw_bf * b,
-    svr_msg * m,
-    tw_lp * lp);
-
-/* for this simulation, each server contacts its neighboring server in an id.
- * this function shows how to use the codes_mapping API to calculate IDs when
- * having to contend with multiple LP types and counts. Note that in this simple
- * example codes_mapping is overkill. */
-static tw_lpid get_next_server(tw_lpid sender_id);
-
-/* arguments to be handled by ROSS - strings passed in are expected to be
- * pre-allocated */
-static char conf_file_name[256] = {0};
-/* this struct contains default parameters used by ROSS, as well as
- * user-specific arguments to be handled by the ROSS config sys. Pass it in
- * prior to calling tw_init */
-const tw_optdef app_opt [] =
-{
-	TWOPT_GROUP("Model net test case" ),
-        TWOPT_CHAR("codes-config", conf_file_name, "name of codes configuration file"),
-	TWOPT_END()
-};
 
 int main(
     int argc,
@@ -191,9 +31,6 @@ int main(
     int rank;
     int num_nets, *net_ids;
 
-    /* TODO: explain why we need this (ROSS has cutoff??) */
-    g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
-
     /* ROSS initialization function calls */
     tw_opt_add(app_opt); /* add user-defined args */
     /* initialize ROSS and parse args. NOTE: tw_init calls MPI_Init */
@@ -201,7 +38,7 @@ int main(
 
     if (!conf_file_name[0]) 
     {
-        fprintf(stderr, "Expected \"codes-config\" option, please see --help.\n");
+        fprintf(stderr, "Expected \"conf\" option, please see --help.\n");
         MPI_Finalize();
         return 1;
     }
@@ -280,11 +117,11 @@ static void svr_add_lp_type()
 }
 
 static void svr_init(
-    svr_state * ns,
+    aspen_svr_state * ns,
     tw_lp * lp)
 {
     tw_event *e;
-    svr_msg *m;
+    aspen_svr_msg *m;
     tw_stime kickoff_time;
     
     memset(ns, 0, sizeof(*ns));
@@ -301,7 +138,7 @@ static void svr_init(
     /* after event is created, grab the allocated message and set msg-specific
      * data */ 
     m = tw_event_data(e);
-    m->svr_event_type = KICKOFF;
+    m->aspen_svr_event_type = KICKOFF;
     /* event is ready to be processed, send it off */
     tw_event_send(e);
 
@@ -310,13 +147,13 @@ static void svr_init(
 
 /* event processing entry point
  * - simply forward the message to the appropriate handler */
-static void svr_event(
-    svr_state * ns,
+static void aspen_svr_event(
+    aspen_svr_state * ns,
     tw_bf * b,
-    svr_msg * m,
+    aspen_svr_msg * m,
     tw_lp * lp)
 {
-   switch (m->svr_event_type)
+   switch (m->aspen_svr_event_type)
     {
         case REQ:
             handle_req_event(ns, b, m, lp);
@@ -331,7 +168,7 @@ static void svr_event(
 	   handle_local_event(ns, b, m, lp); 
 	 break;
         default:
-	    printf("\n Invalid message type %d ", m->svr_event_type);
+	    printf("\n Invalid message type %d ", m->aspen_svr_event_type);
             assert(0);
         break;
     }
@@ -339,13 +176,13 @@ static void svr_event(
 
 /* reverse event processing entry point
  * - simply forward the message to the appropriate handler */
-static void svr_rev_event(
-    svr_state * ns,
+static void aspen_svr_rev_event(
+    aspen_svr_state * ns,
     tw_bf * b,
-    svr_msg * m,
+    aspen_svr_msg * m,
     tw_lp * lp)
 {
-    switch (m->svr_event_type)
+    switch (m->aspen_svr_event_type)
     {
         case REQ:
             handle_req_rev_event(ns, b, m, lp);
@@ -368,8 +205,8 @@ static void svr_rev_event(
 }
 
 /* once the simulation is over, do some output */
-static void svr_finalize(
-    svr_state * ns,
+static void aspen_svr_finalize(
+    aspen_svr_state * ns,
     tw_lp * lp)
 {
     printf("server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", 
@@ -421,9 +258,9 @@ tw_lpid get_next_server(tw_lpid sender_id)
 
 /* handle initial event */
 static void handle_kickoff_event(
-    svr_state * ns,
+    aspen_svr_state * ns,
     tw_bf * b,
-    svr_msg * m,
+    aspen_svr_msg * m,
     tw_lp * lp)
 {
     int dest_id;
@@ -434,12 +271,12 @@ static void handle_kickoff_event(
      * message to the recipient and an optional callback message 
      * - thankfully, memory need not persist past the model_net_event call - it
      *   copies the messages */
-    svr_msg m_local;
-    svr_msg m_remote;
+    aspen_svr_msg m_local;
+    aspen_svr_msg m_remote;
 
-    m_local.svr_event_type = LOCAL;
+    m_local.aspen_svr_event_type = LOCAL;
     m_local.src = lp->gid;
-    m_remote.svr_event_type = REQ;
+    m_remote.aspen_svr_event_type = REQ;
     m_remote.src = lp->gid;
 
     /* record when transfers started on this server */
@@ -459,17 +296,17 @@ static void handle_kickoff_event(
 
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
      * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null) */
-    model_net_event(net_id, "test", dest_id, payload_sz, 0.0, sizeof(svr_msg), 
-            (const void*)&m_remote, sizeof(svr_msg), (const void*)&m_local, lp);
+    model_net_event(net_id, "test", dest_id, payload_sz, 0.0, sizeof(aspen_svr_msg),
+            (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     ns->msg_sent_count++;
 }
 
 /* at the moment, no need for local callbacks from model-net, so we maintain a
  * count for debugging purposes */ 
 static void handle_local_event(
-		svr_state * ns,
+		aspen_svr_state * ns,
 		tw_bf * b,
-		svr_msg * m,
+		aspen_svr_msg * m,
 		tw_lp * lp)
 {
     ns->local_recvd_count++;
@@ -480,9 +317,9 @@ static void handle_local_event(
  * of size payload_sz have been satisfied - we begin the next req when we
  * receive an ACK from the destination server */
 static void handle_ack_event(
-    svr_state * ns,
+    aspen_svr_state * ns,
     tw_bf * b,
-    svr_msg * m,
+    aspen_svr_msg * m,
     tw_lp * lp)
 {
     /* the ACK actually doesn't come from the NIC on the other server -
@@ -498,17 +335,17 @@ static void handle_ack_event(
     if(ns->msg_sent_count < num_reqs)
     {
         /* again, allocate our own msgs so model-net can transmit on our behalf */
-        svr_msg m_local;
-        svr_msg m_remote;
+        aspen_svr_msg m_local;
+        aspen_svr_msg m_remote;
 
-        m_local.svr_event_type = LOCAL;
+        m_local.aspen_svr_event_type = LOCAL;
         m_local.src = lp->gid;
-        m_remote.svr_event_type = REQ;
+        m_remote.aspen_svr_event_type = REQ;
         m_remote.src = lp->gid;
 
         /* send another request */
-	model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(svr_msg), 
-                (const void*)&m_remote, sizeof(svr_msg), (const void*)&m_local, lp);
+	model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
+                (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
         ns->msg_sent_count++;
         m->incremented_flag = 1;
         
@@ -524,17 +361,17 @@ static void handle_ack_event(
 
 /* handle receiving request */
 static void handle_req_event(
-    svr_state * ns,
+    aspen_svr_state * ns,
     tw_bf * b,
-    svr_msg * m,
+    aspen_svr_msg * m,
     tw_lp * lp)
 {
-    svr_msg m_local;
-    svr_msg m_remote;
+    aspen_svr_msg m_local;
+    aspen_svr_msg m_remote;
 
-    m_local.svr_event_type = LOCAL;
+    m_local.aspen_svr_event_type = LOCAL;
     m_local.src = lp->gid;
-    m_remote.svr_event_type = ACK;
+    m_remote.aspen_svr_event_type = ACK;
     m_remote.src = lp->gid;
 
     /* safety check that this request got to the right server */
@@ -548,8 +385,8 @@ static void handle_req_event(
     /* also trigger a local event for completion of payload msg */
     /* remote host will get an ack event */
    
-    model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(svr_msg), 
-            (const void*)&m_remote, sizeof(svr_msg), (const void*)&m_local, lp);
+    model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
+            (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     return;
 }
 
@@ -559,18 +396,18 @@ static void handle_req_event(
  * containing queues) */
 
 static void handle_local_rev_event(
-	       svr_state * ns,
+	       aspen_svr_state * ns,
 	       tw_bf * b,
-	       svr_msg * m,
+	       aspen_svr_msg * m,
 	       tw_lp * lp)
 {
    ns->local_recvd_count--;
 }
 /* reverse handler for req event */
 static void handle_req_rev_event(
-    svr_state * ns,
+    aspen_svr_state * ns,
     tw_bf * b,
-    svr_msg * m,
+    aspen_svr_msg * m,
     tw_lp * lp)
 {
     ns->msg_recvd_count--;
@@ -583,9 +420,9 @@ static void handle_req_rev_event(
 
 /* reverse handler for kickoff */
 static void handle_kickoff_rev_event(
-    svr_state * ns,
+    aspen_svr_state * ns,
     tw_bf * b,
-    svr_msg * m,
+    aspen_svr_msg * m,
     tw_lp * lp)
 {
     ns->msg_sent_count--;
@@ -596,9 +433,9 @@ static void handle_kickoff_rev_event(
 
 /* reverse handler for ack*/
 static void handle_ack_rev_event(
-    svr_state * ns,
+    aspen_svr_state * ns,
     tw_bf * b,
-    svr_msg * m,
+    aspen_svr_msg * m,
     tw_lp * lp)
 {
     if(m->incremented_flag)

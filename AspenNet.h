@@ -1,0 +1,192 @@
+/*
+ * Aspen-Codes integration model
+ * Author: Mark Blanco
+ * Date: 24 June 2015
+ * Note: this model is directly based off of the codes-base example (example.c)
+ * They may look very similar for a while
+ * The CODES project can be found at http://www.mcs.anl.gov/research/projects/codes/
+ * The ROSS project, which codes is based on, can be found at 
+ * https://github.com/carothersc/ROSS/wiki
+ * Finally, ASPEN can be found at https://ft.ornl.gov/node/1566...sort of.
+*/
+
+#ifndef ASPEN_HEADER
+#define ASPEN_HEADER
+
+#include <string.h>
+#include <assert.h>
+#include <ross.h>
+
+#include "codes/lp-io.h"
+#include "codes/codes.h"
+#include "codes/codes_mapping.h"
+#include "codes/configuration.h"
+#include "codes/model-net.h"
+#include "codes/lp-type-lookup.h"
+#include "codes/local-storage-model.h"
+// TODO: Add an include here for the aspen intergration file that will
+// support computation estimation
+// NOTE: the config file should contain the paths to the aspen kernel model(s)
+// and hardware model
+
+static int num_reqs = 0;/* number of requests sent by each server (read from config) */
+static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
+
+/* model-net ID, can be either simple-net, dragonfly or torus (more may be
+ * added) */
+static int net_id = 0;
+static int num_servers = 0;
+static int offset = 2;
+
+/* expected LP group name in configure files for this program */
+static char *group_name = "ASPEN_SERVERS";
+/* expected parameter group name for rounds of communication */
+static char *param_group_nm = "server_pings";
+static char *num_reqs_key = "num_reqs";
+static char *payload_sz_key = "payload_sz";
+
+typedef struct svr_msg aspen_svr_msg;
+typedef struct svr_state aspen_svr_state;
+
+/* types of events that will constitute server activities */
+enum svr_event
+{
+    KICKOFF,    /* initial event */
+    REQ,        /* request event */
+    ACK,        /* ack event */
+    LOCAL      /* local event */
+    // TODO: Add an event here for ASPEN computation/estimation
+    // LOCAL event may be able to be reused for this...
+};
+
+/* this struct serves as the ***persistent*** state of the LP representing the 
+ * server in question. This struct is setup when the LP initialization function
+ * ptr is called */
+struct svr_state
+{
+    int msg_sent_count;   /* requests sent */
+    int msg_recvd_count;  /* requests recvd */
+    int local_recvd_count; /* number of local messages received */
+    tw_stime start_ts;    /* time that we started sending requests */
+    tw_stime end_ts;      /* time that last request finished */
+    // TODO: Add a way to count wall time, or add the Aspen-generated time to
+    //  the tw_stime delta at the end of the simulation
+};
+
+/* this struct serves as the ***temporary*** event data, which can be thought
+ * of as a message between two LPs. */
+struct svr_msg
+{
+    enum svr_event aspen_svr_event_type;
+    tw_lpid src;          /* source of this request or ack */
+
+    int incremented_flag; /* helper for reverse computation */
+};
+
+/* ROSS expects four functions per LP:
+ * - an LP initialization function, called for each LP
+ * - an event processing function
+ * - a *reverse* event processing function (rollback), and
+ * - a finalization/cleanup function when the simulation ends
+ */
+static void aspen_svr_init(
+    aspen_svr_state * ns,
+    tw_lp * lp);
+static void aspen_svr_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+static void aspen_svr_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+static void aspen_svr_finalize(
+    aspen_svr_state * ns,
+    tw_lp * lp);
+
+/* set up the function pointers for ROSS, as well as the size of the LP state
+ * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
+tw_lptype svr_lp = {
+    (init_f) aspen_svr_init,
+    (pre_run_f) NULL,
+    (event_f) aspen_svr_event,
+    (revent_f) aspen_svr_rev_event,
+    (final_f)  aspen_svr_finalize,
+    (map_f) codes_mapping,
+    sizeof(aspen_svr_state),
+};
+
+extern const tw_lptype* svr_get_lp_type();
+static void svr_add_lp_type();
+static tw_stime ns_to_s(tw_stime ns);
+static tw_stime s_to_ns(tw_stime ns);
+
+/* as we only have a single event processing entry point and multiple event
+ * types, for clarity we define "handlers" for each (reverse) event type */
+static void handle_kickoff_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+static void handle_ack_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+static void handle_req_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+static void handle_local_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+   tw_lp * lp);
+static void handle_local_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+   tw_lp * lp);
+static void handle_kickoff_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+static void handle_ack_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+static void handle_req_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+
+// TODO: Add event handlers for aspen events?
+
+/* for this simulation, each server contacts its neighboring server in an id.
+ * this function shows how to use the codes_mapping API to calculate IDs when
+ * having to contend with multiple LP types and counts. Note that in this simple
+ * example codes_mapping is overkill. */
+static tw_lpid get_next_server(tw_lpid sender_id);
+
+/* arguments to be handled by ROSS - strings passed in are expected to be
+ * pre-allocated */
+static char conf_file_name[256] = {0};
+/* this struct contains default parameters used by ROSS, as well as
+ * user-specific arguments to be handled by the ROSS config sys. Pass it in
+ * prior to calling tw_init */
+const tw_optdef app_opt [] =
+{
+	TWOPT_GROUP("Model net test case" ),
+        TWOPT_CHAR("conf", conf_file_name, "name of codes configuration file"),
+	TWOPT_END()
+};
+
+/* TODO: explain why we need this (ROSS has cutoff??) */
+g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
+#endif
