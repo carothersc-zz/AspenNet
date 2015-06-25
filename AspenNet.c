@@ -22,6 +22,8 @@
 #include "codes/lp-type-lookup.h"
 #include "codes/local-storage-model.h"
 
+#include "AspenNet.h"
+
 
 int main(
     int argc,
@@ -31,6 +33,9 @@ int main(
     int rank;
     int num_nets, *net_ids;
 
+    /* TODO: explain why we need this (ROSS has cutoff??) */
+    g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
+    
     /* ROSS initialization function calls */
     tw_opt_add(app_opt); /* add user-defined args */
     /* initialize ROSS and parse args. NOTE: tw_init calls MPI_Init */

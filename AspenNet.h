@@ -186,7 +186,4 @@ const tw_optdef app_opt [] =
         TWOPT_CHAR("conf", conf_file_name, "name of codes configuration file"),
 	TWOPT_END()
 };
-
-/* TODO: explain why we need this (ROSS has cutoff??) */
-g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
 #endif

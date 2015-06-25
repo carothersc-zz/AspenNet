@@ -14,7 +14,7 @@ CC = $(shell $(ROSS)/bin/ross-config --cc)
 LDFLAGS = $(shell $(ROSS)/bin/ross-config --ldflags) -L$(CODESBASE)/lib -L$(CODESNET)/lib
 LDLIBS = $(shell $(ROSS)/bin/ross-config --libs) -lcodes-net -lcodes-base 
 
-CODES-AspenNet: AspenNet.c
+AspenNet: AspenNet.c
 
 clean:   
-	rm -f CODES-AspenNet
+	rm -f AspenNet
