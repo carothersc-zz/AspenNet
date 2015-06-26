@@ -1,2 +1,14 @@
 
 *.swp
+
+AspenNet
+
+.deps/.dirstamp
+
+*.Po
+
+.dirstamp
+
+*.csv
+
+*.o

@@ -8,7 +8,7 @@
  * The ROSS project, which codes is based on, can be found at 
  * https://github.com/carothersc/ROSS/wiki
  * Finally, ASPEN can be found at https://ft.ornl.gov/node/1566...sort of.
-*/
+ */
 
 #ifndef ASPEN_HEADER
 #define ASPEN_HEADER
