@@ -16,6 +16,6 @@ void getSockets(char *m, char*** buf, int * size);
 
 
 int main(){
-    printf("%f", runtimeCalc("models/fft/1D_FFT.aspen", "models/machine/TestRig.aspen", "amd_HD5770"));
+    printf("%f", runtimeCalc("./models/fft/1D_FFT.aspen", "./models/machine/TestRig.aspen", "amd_HD5770"));
     return 0;
 }
