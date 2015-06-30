@@ -12,3 +12,5 @@ AspenNet
 *.csv
 
 *.o
+
+models
