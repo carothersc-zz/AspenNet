@@ -17,15 +17,6 @@
 #include <assert.h>
 #include <ross.h>
 
-#include "codes/lp-io.h"
-#include "codes/codes.h"
-#include "codes/codes_mapping.h"
-#include "codes/configuration.h"
-#include "codes/model-net.h"
-#include "codes/lp-type-lookup.h"
-#include "codes/local-storage-model.h"
-// TODO: Add an include here for the aspen intergration file that will
-// support computation estimation
 // NOTE: the config file should contain the paths to the aspen kernel model(s)
 // and hardware model
 

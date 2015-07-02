@@ -24,6 +24,9 @@
 
 #include "AspenNet.h"
 
+// Prototypes for extern C functions:
+extern double runtimeCalc(char *a, char *m, char * socket);
+extern int getSockets(char *m, char*** buf);
 
 int main(
     int argc,
@@ -142,7 +145,7 @@ static void aspen_svr_init(
     e = codes_event_new(lp->gid, kickoff_time, lp);
     /* after event is created, grab the allocated message and set msg-specific
      * data */ 
-    m = tw_event_data(e);
+    m = (aspen_svr_msg*)tw_event_data(e);
     m->aspen_svr_event_type = KICKOFF;
     /* event is ready to be processed, send it off */
     tw_event_send(e);

@@ -11,17 +11,18 @@
 #include "codes/local-storage-model.h"
 
 // Prototypes for extern C functions:
-double runtimeCalc(char *a, char *m, char * socket);
-int getSockets(char *m, char*** buf);
+extern double runtimeCalc(char *a, char *m, char * socket);
+extern int getSockets(char *m, char*** buf);
 
 
 int main(){
+    int i;
     char **buf = NULL;
     int size = -1;
 
-    printf("%e\n", runtimeCalc("./models/fft/1D_FFT.aspen", "./models/machine/TestRig.aspen", "amd_HD5770"));
+    printf("%e\n", runtimeCalc("./models/matmul/parallel_matmul.aspen", "./models/machine/llano.aspen", "amd_a8_3850_cpu"));
 
-    size = getSockets("./models/machine/TestRig.aspen", &buf);
+    size = getSockets("./models/machine/llano.aspen", &buf);
 
     if (size == -1){
         fprintf(stderr, "ERROR: No int was stored!\n");
@@ -32,7 +33,7 @@ int main(){
             fprintf(stderr, "ERROR: No sockets were returned!\n");
         }
         else {
-            for (int i = 0; i < size; i++){
+            for (i = 0; i < size; i++){
                 printf("%s\n", buf[i]);
             }
         }   

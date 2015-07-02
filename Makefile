@@ -1,9 +1,8 @@
-ROSS:=/usr/local/
-SRC_BASE:=/Users/Mark/Desktop/RPI-Research
+SRC_BASE:=/home/blancm3/RPI-Research
+ROSS:=$(SRC_BASE)/ROSS/INSTALL
 CODESBASE:=$(SRC_BASE)/codes-base/INSTALL
 CODESNET:=$(SRC_BASE)/codes-net/INSTALL
 ASPEN:=$(SRC_BASE)/aspen-sim
-
 
 ifndef CODESBASE
 $(error CODESBASE is undefined, see README.txt)
@@ -18,11 +17,27 @@ endif
 # ross conflates CFLAGS with CPPFLAGS, so use just this one
 override CPPFLAGS += $(shell $(ROSS)/bin/ross-config --cflags) -I$(CODESBASE)/include -I$(CODESNET)/include -I$(ASPEN)/aspen
 CC = $(shell $(ROSS)/bin/ross-config --cc)
-LDFLAGS = $(shell $(ROSS)/bin/ross-config --ldflags) -L$(CODESBASE)/lib -L$(CODESNET)/lib -L$(ASPEN)/lib
-LDLIBS = $(shell $(ROSS)/bin/ross-config --libs) -lcodes-net -lcodes-base -laspen -lc++
+LDFLAGS = $(shell $(ROSS)/bin/ross-config --ldflags) -L$(CODESBASE)/lib -L$(CODESNET)/lib -L$(ASPEN)/lib 
+LDLIBS = -laspen -lcodes-net -lcodes-base $(shell $(ROSS)/bin/ross-config --libs) -lcodes-net#-lc++
 
-AspenNet:
-	$(CC) -g $(CPPFLAGS) -v -O2 test.c AspenNet_AspenUtils.cpp $(LDFLAGS) $(LDLIBS) -o AspenNet
+# Actual compilation directions:
+
+AspenNet_AspenUtils.o: AspenNet_AspenUtils.cpp
+	mpic++ -g $(CPPFLAGS) -c -v -O2 AspenNet_AspenUtils.cpp -o AspenNet_AspenUtils.o
+
+AspenNet.o: AspenNet.c
+	$(CC) -g $(CPPFLAGS) -c -v -O2 AspenNet.c -o AspenNet.o
+
+test.o: test.c
+	$(CC) -g $(CPPFLAGS) -c -v -O2 test.c -o test.o
+
+AspenNet: AspenNet.o AspenNet_AspenUtils.o
+	mpic++ -g $(CPPFLAGS)  AspenNet.o AspenNet_AspenUtils.o  $(LDFLAGS) $(LDLIBS) -o AspenNet
+
+testfile: test.o AspenNet_AspenUtils.o
+	mpic++ -g $(CPPFLAGS) -v -O2 test.o AspenNet_AspenUtils.o $(LDFLAGS) $(LDLIBS) -o test
 
 clean:   
-	rm -f AspenNet *.o
+	rm -f *.o
+	rm -f AspenNet
+	rm -f test

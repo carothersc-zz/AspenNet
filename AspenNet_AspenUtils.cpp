@@ -23,9 +23,13 @@
 #include "walkers/RuntimeExpression.h"
 
 #include <sys/time.h>
-// Going to need to figure out how to get most of these includes to work...
 
-extern "C" double runtimeCalc(char *a, char *m, char * socket)
+extern "C"{
+double runtimeCalc(char *a, char *m, char * socket);
+int getSockets(char *m, char*** buf);
+
+
+double runtimeCalc(char *a, char *m, char * socket)
 {
     if (a && m && socket){
         
@@ -52,7 +56,7 @@ extern "C" double runtimeCalc(char *a, char *m, char * socket)
     }
 }
 
-extern "C" int getSockets(char *m, char*** buf){
+int getSockets(char *m, char*** buf){
     if (m){
 
         ASTMachModel *mach = LoadMachineModel(m);
@@ -76,4 +80,5 @@ extern "C" int getSockets(char *m, char*** buf){
         return mach->socketlist.size();
     }
     return -1;
+}
 }
