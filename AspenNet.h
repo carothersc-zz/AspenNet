@@ -23,7 +23,6 @@
 static int socket;     // Global int for the socket to be used (perhaps this should be configure in the conf file?)
 static char *Aspen_Mach_Path = NULL;      // Global for path and name of Aspen model
 static char *Aspen_App_Path = NULL;        // Global for path and name of Aspen application/kernel
-
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
 

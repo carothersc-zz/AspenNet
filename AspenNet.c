@@ -42,6 +42,7 @@ int main(
     /* ROSS initialization function calls */
     tw_opt_add(app_opt); /* add user-defined args */
     /* initialize ROSS and parse args. NOTE: tw_init calls MPI_Init */
+    printf("Argc = %d", argc);
     tw_init(&argc, &argv); 
     if (!conf_file_name[0]) 
     {
