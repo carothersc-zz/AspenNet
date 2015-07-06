@@ -30,7 +30,7 @@ extern int getSockets(char *m, char*** buf);
 
 int main(
     int argc,
-    char **argv)
+    char *argv[])
 {
     int nprocs;
     int rank;
@@ -42,8 +42,9 @@ int main(
     /* ROSS initialization function calls */
     tw_opt_add(app_opt); /* add user-defined args */
     /* initialize ROSS and parse args. NOTE: tw_init calls MPI_Init */
+    printf("Argc = %d", argc);
     tw_init(&argc, &argv); 
-
+    printf("Hello!\n");
     if (!conf_file_name[0]) 
     {
         fprintf(stderr, "Expected \"conf\" option, please see --help.\n");
@@ -101,6 +102,9 @@ int main(
      * go ahead and read them prior to running */
     configuration_get_value_int(&config, param_group_nm, num_reqs_key, NULL, &num_reqs);
     configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
+    //configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, &Aspen_App_Path, 25);
+    //configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 30);
+    // TODO: remove hard-coded length of 50!
 
     /* begin simulation */ 
     tw_run();
