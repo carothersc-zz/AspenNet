@@ -101,10 +101,12 @@ int main(
      * go ahead and read them prior to running */
     configuration_get_value_int(&config, param_group_nm, num_reqs_key, NULL, &num_reqs);
     configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
-    configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, &Aspen_App_Path, 25);
-    configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 30);
-    // TODO: remove hard-coded length of 50!
-
+    if (g_tw_mynode == 0) {
+        configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, &Aspen_App_Path, 100);
+        configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100);
+        // TODO: remove hard-coded length of 100!
+        if (!(Aspen_App_Path && Aspen_Mach_Path)) printf("WE HAVE A PROBLEM!\n\n");
+    }
     /* begin simulation */ 
     tw_run();
 
