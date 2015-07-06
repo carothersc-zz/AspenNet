@@ -19,10 +19,11 @@ int main(){
     int i;
     char **buf = NULL;
     int size = -1;
+    char* app = "./models/fft/1D_FFT.aspen";
+    char* machine = "./models/machine/llano.aspen";
+    printf("%e\n", runtimeCalc(app, machine, "amd_a8_3850_cpu"));
 
-    printf("%e\n", runtimeCalc("./models/matmul/parallel_matmul.aspen", "./models/machine/llano.aspen", "amd_a8_3850_cpu"));
-
-    size = getSockets("./models/machine/llano.aspen", &buf);
+    size = getSockets(machine,  &buf);
 
     if (size == -1){
         fprintf(stderr, "ERROR: No int was stored!\n");

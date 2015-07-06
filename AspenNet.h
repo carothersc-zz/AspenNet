@@ -20,6 +20,10 @@
 // NOTE: the config file should contain the paths to the aspen kernel model(s)
 // and hardware model
 
+static int socket;     // Global int for the socket to be used (perhaps this should be configure in the conf file?)
+static char *Aspen_Mach_Path = NULL;      // Global for path and name of Aspen model
+static char *Aspen_App_Path = NULL;        // Global for path and name of Aspen application/kernel
+
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
 
@@ -35,6 +39,9 @@ static char *group_name = "ASPEN_SERVERS";
 static char *param_group_nm = "server_pings";
 static char *num_reqs_key = "num_reqs";
 static char *payload_sz_key = "payload_sz";
+static char *aspen_group_nm = "ASPEN_PARAMS";
+static char *aspen_app_key = "aspen_app_path";
+static char *aspen_mach_key = "aspen_mach_path";
 
 typedef struct svr_msg aspen_svr_msg;
 typedef struct svr_state aspen_svr_state;
@@ -45,7 +52,8 @@ enum svr_event
     KICKOFF,    /* initial event */
     REQ,        /* request event */
     ACK,        /* ack event */
-    LOCAL      /* local event */
+    LOCAL     /* local event */
+    //ASPENCOMP /* event during which Aspen will be called */
     // TODO: Add an event here for ASPEN computation/estimation
     // LOCAL event may be able to be reused for this...
 };
