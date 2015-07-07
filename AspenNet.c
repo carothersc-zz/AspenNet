@@ -156,7 +156,6 @@ static void aspen_svr_init(
     m->aspen_svr_event_type = KICKOFF;
     /* event is ready to be processed, send it off */
     tw_event_send(e);
-    printf("LP %lu has kicked off!\n", lp->gid);
 
     return;
 }
@@ -405,15 +404,26 @@ static void handle_req_event(
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     /* If we've received and sent all the messages we planned to,
      * go into the AspenComp phase: */
-    /*if (ns->msg_sent_count = num_reqs && ns->msg_recvd_count == num_reqs)
+    if (ns->msg_sent_count = num_reqs && ns->msg_recvd_count == num_reqs)
     {
-        m_local.aspen_svr_event_type = LOCAL;
-        m_local.src = lp->gid;
-        m_remote.aspen_svr_event_type = ASPENCOMP;
-        m_remote.src = lp->gid;
-        model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
-            (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
-    }*/
+        tw_event *e; 
+        aspen_svr_msg *m;
+        tw_stime compute_time;
+        
+        memset(ns, 0, sizeof(*ns));
+
+        /* skew each kickoff event slightly to help avoid event ties later on */
+        kickoff_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
+
+        /* first create the event (time arg is an offset, not absolute time) */
+        e = codes_event_new(lp->gid, kickoff_time, lp);
+        /* after event is created, grab the allocated message and set msg-specific
+         * data */ 
+        m = tw_event_data(e);
+        m->aspen_svr_event_type = KICKOFF;
+        /* event is ready to be processed, send it off */
+        tw_event_send(e);
+    }
     return;
 }
 
@@ -504,7 +514,9 @@ static void handle_computation_rev_event(
         printf("Master LP %lu)\n",lp->gid);
 
     } 
-    // Non-master LPs need to perform an MPI block and wait for the master LP to perform its computation estimation:
+    // Non-master LPs need to perform an MPI block and wait for the master LP to perform its computation estimation
+    // NOTE: this is actually not feasible, since there are several LPs per MPI rank.
+    // Need to do something like forcing a gvt update in ROSS...
     else
     {
         printf("Slave LP %lu)\n",lp->gid);
