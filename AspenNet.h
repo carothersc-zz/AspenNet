@@ -21,8 +21,9 @@
 // and hardware model
 
 static int socket;     // Global int for the socket to be used (perhaps this should be configure in the conf file?)
-static char *Aspen_Mach_Path = NULL;      // Global for path and name of Aspen model
-static char *Aspen_App_Path = NULL;        // Global for path and name of Aspen application/kernel
+char *Aspen_Mach_Path[100];      // Global for path and name of Aspen model
+char *Aspen_App_Path[100];        // Global for path and name of Aspen application/kernel
+// TODO: Do something better than having a hard-coded length...
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
 
@@ -51,8 +52,8 @@ enum svr_event
     KICKOFF,    /* initial event */
     REQ,        /* request event */
     ACK,        /* ack event */
-    LOCAL     /* local event */
-    //ASPENCOMP /* event during which Aspen will be called */
+    LOCAL,      /* local event */
+    ASPENCOMP   /* event during which Aspen will be called */
     // TODO: Add an event here for ASPEN computation/estimation
     // LOCAL event may be able to be reused for this...
 };
@@ -143,6 +144,11 @@ static void handle_local_event(
     tw_bf * b,
     aspen_svr_msg * m,
    tw_lp * lp);
+static void handle_computation_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
 static void handle_local_rev_event(
     aspen_svr_state * ns,
     tw_bf * b,
@@ -163,8 +169,12 @@ static void handle_req_rev_event(
     tw_bf * b,
     aspen_svr_msg * m,
     tw_lp * lp);
+static void handle_computation_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
 
-// TODO: Add event handlers for aspen events?
 
 /* for this simulation, each server contacts its neighboring server in an id.
  * this function shows how to use the codes_mapping API to calculate IDs when

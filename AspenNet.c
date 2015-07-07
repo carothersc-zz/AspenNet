@@ -27,7 +27,10 @@
 // Prototypes for extern C functions:
 extern double runtimeCalc(char *a, char *m, char * socket);
 extern int getSockets(char *m, char*** buf);
-
+float runningTime = 0;  /* Use this global float, which only \
+                        the LP with gid = 0 will update to keep \
+                        track of the total runtime of the Aspen \
+                        & network simulation. */
 int main(
     int argc,
     char *argv[])
@@ -46,7 +49,7 @@ int main(
     tw_init(&argc, &argv); 
     if (!conf_file_name[0]) 
     {
-        fprintf(stderr, "Expected \"conf\" option, please see --help.\n");
+        fprintf(stderr, "Expected \"--conf\" option, please see --help.\n");
         MPI_Finalize();
         return 1;
     }
@@ -95,16 +98,17 @@ int main(
     /* calculate the number of servers in this simulation,
      * ignoring annotations */
     num_servers = codes_mapping_get_lp_count(group_name, 0, "server", NULL, 1);
-
+    
     /* for this example, we read from a separate configuration group for
      * server message parameters. Since they are constant for all LPs,
      * go ahead and read them prior to running */
     configuration_get_value_int(&config, param_group_nm, num_reqs_key, NULL, &num_reqs);
     configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
-    configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, &Aspen_App_Path, 25);
-    configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 30);
-    // TODO: remove hard-coded length of 50!
-
+    if (g_tw_mynode == 0) {
+        configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, &Aspen_App_Path, 100);
+        configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100);
+        // TODO: remove hard-coded length of 100!
+    }
     /* begin simulation */ 
     tw_run();
 
@@ -131,7 +135,7 @@ static void aspen_svr_init(
     aspen_svr_state * ns,
     tw_lp * lp)
 {
-    tw_event *e;
+    tw_event *e; 
     aspen_svr_msg *m;
     tw_stime kickoff_time;
     
@@ -152,6 +156,7 @@ static void aspen_svr_init(
     m->aspen_svr_event_type = KICKOFF;
     /* event is ready to be processed, send it off */
     tw_event_send(e);
+    printf("LP %lu has kicked off!\n", lp->gid);
 
     return;
 }
@@ -398,8 +403,39 @@ static void handle_req_event(
    
     model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
+    /* If we've received and sent all the messages we planned to,
+     * go into the AspenComp phase: */
+    /*if (ns->msg_sent_count = num_reqs && ns->msg_recvd_count == num_reqs)
+    {
+        m_local.aspen_svr_event_type = LOCAL;
+        m_local.src = lp->gid;
+        m_remote.aspen_svr_event_type = ASPENCOMP;
+        m_remote.src = lp->gid;
+        model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
+            (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
+    }*/
     return;
 }
+
+static void handle_computation_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    // Add code to define computation behavior here:
+    if (!g_tw_mynode && !lp->gid){
+        printf("Master LP %lu\n",lp->gid);
+
+    } 
+    // Non-master LPs need to perform an MPI block and wait for the master LP to perform its computation estimation:
+    else
+    {
+        printf("Slave LP %lu\n",lp->gid);
+    }
+    return;
+}
+
 
 /* for us, reverse events are very easy, the only LP state that needs to be
  * rolled back are the counts.
@@ -453,6 +489,25 @@ static void handle_ack_rev_event(
     {
         model_net_event_rc(net_id, lp, payload_sz);
         ns->msg_sent_count--;
+    }
+    return;
+}
+
+static void handle_computation_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    // Add code to define computation behavior here:
+    if (!g_tw_mynode && !lp->gid){
+        printf("Master LP %lu)\n",lp->gid);
+
+    } 
+    // Non-master LPs need to perform an MPI block and wait for the master LP to perform its computation estimation:
+    else
+    {
+        printf("Slave LP %lu)\n",lp->gid);
     }
     return;
 }
