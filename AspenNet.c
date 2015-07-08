@@ -222,6 +222,12 @@ static void aspen_svr_rev_event(
 	case LOCAL:
 	    handle_local_rev_event(ns, b, m, lp);    
 	    break;
+        case DATA:
+            handle_data_rev_event(ns, b, m, lp);
+            break;
+        case ASPENCOMP:
+            handle_computation_rev_event(ns, b, m, lp);
+            break;
         default:
             assert(0);
             break;
