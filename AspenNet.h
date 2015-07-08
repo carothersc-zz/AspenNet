@@ -21,8 +21,8 @@
 // and hardware model
 
 static int socket;     // Global int for the socket to be used (perhaps this should be configure in the conf file?)
-char *Aspen_Mach_Path[100];      // Global for path and name of Aspen model
-char *Aspen_App_Path[100];        // Global for path and name of Aspen application/kernel
+char Aspen_Mach_Path[100];      // Global for path and name of Aspen model
+char Aspen_App_Path[100];        // Global for path and name of Aspen application/kernel
 // TODO: Do something better than having a hard-coded length...
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
@@ -32,6 +32,8 @@ static int payload_sz = 0; /* size of simulated data payload, bytes (read from c
 static int net_id = 0;
 static int num_servers = 0;
 static int offset = 2;
+
+static unsigned int ttl_lps = 0;
 
 /* expected LP group name in configure files for this program */
 static char *group_name = "ASPEN_SERVERS";
@@ -207,14 +209,14 @@ static char conf_file_name[256] = {0};
 
 /* two value-swapper functions for processing the start and end 
  * timestamps received in data events */
-inline void swap_start(aspen_srv_state * ns, aspen_svr_msg * m)
+inline void swap_start(aspen_svr_state * ns, aspen_svr_msg * m)
 {
     tw_stime temp = ns->start_global;
     ns->start_global = m->start_ts;
     m->start_ts = temp;
 }
 
-inline void swap_end(aspen_srv_state * ns, aspen_svr_msg * m)
+inline void swap_end(aspen_svr_state * ns, aspen_svr_msg * m)
 {
     tw_stime temp = ns->end_global;
     ns->end_global = m->end_ts;

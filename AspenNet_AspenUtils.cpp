@@ -60,12 +60,11 @@ int getSockets(char *m, char*** buf){
     if (m){
 
         ASTMachModel *mach = LoadMachineModel(m);
-        std::cout << "Planning to return " << mach->socketlist.size() << " sockets." << std::endl;
+        fprintf(stderr,"INFO: Planning to return %d sockets.\n",  mach->socketlist.size());
         *buf = (char**) malloc(sizeof(char*) * mach->socketlist.size());
         
         // Copy the strings over as char*'s
         for (int i = 0; i < mach->socketlist.size(); i++){
-            std::cout << "Copying string: " << mach->socketlist[i] << std::endl;
             (*buf)[i] = (char*) malloc(sizeof(char) * 30);
             for (int j = 0; j < 30; j++){
                 if (j < mach->socketlist[i].size()){

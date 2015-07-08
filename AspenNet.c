@@ -27,10 +27,8 @@
 // Prototypes for extern C functions:
 extern double runtimeCalc(char *a, char *m, char * socket);
 extern int getSockets(char *m, char*** buf);
-tw_stime earliestStart = 100000;  /* Global value to keep track of 
-                         * smallest start time of any LP */
-tw_stime latestFinish = 0;  /* Global value for latest end
-                             * time of any LP */
+tw_stime totalRuntime = 0;  /* Global value to keep track of total runtime */
+unsigned int lastSocket = 0; /*The last socket that was used */
 
 int main(
     int argc,
@@ -109,6 +107,12 @@ int main(
         configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100);
         // TODO: remove hard-coded length of 100!
     }
+    printf("The size of a server message is: %d.\n",sizeof(aspen_svr_msg));
+
+    ttl_lps = tw_nnodes() * g_tw_npe * g_tw_nlp/2;
+    
+    g_tw_msg_sz = 512;
+
     /* begin simulation */ 
     tw_run();
 
@@ -140,7 +144,7 @@ static void aspen_svr_init(
     tw_stime kickoff_time;
     
     memset(ns, 0, sizeof(*ns));
-
+    ns->end_ts = 0; // Set this to 0 in order to use it as a flag later
     /* each server sends a dummy event to itself that will kick off the real
      * simulation
      */
@@ -180,8 +184,14 @@ static void aspen_svr_event(
             handle_kickoff_event(ns, b, m, lp);
             break;
 	case LOCAL:
-	   handle_local_event(ns, b, m, lp); 
-	 break;
+	    handle_local_event(ns, b, m, lp);
+            break;
+        case DATA:
+            handle_data_event(ns, b, m, lp);
+            break;
+        case ASPENCOMP:
+            handle_computation_event(ns, b, m, lp);
+	    break;
         default:
 	    printf("\n Invalid message type %d ", m->aspen_svr_event_type);
             assert(0);
@@ -296,8 +306,8 @@ static void handle_kickoff_event(
     
     fprintf(stderr,"This LP has gid: %lu and local id: %lu. Node id: %lu\n\
             The total number of server LPs is: %lu.\n\
-            The offset is: %d\n\
-            The number of PEs is: %d\n.",\
+            The offset is: %lu\n\
+            The number of PEs is: %lu\n.",\
             lp->gid, lp->id, g_tw_mynode, g_tw_nlp, g_tw_lp_offset, g_tw_npe);
 
     /* record when transfers started on this server */
@@ -379,7 +389,7 @@ static void handle_ack_event(
         /* Send a message to LP 0 conatining your start and end times: */
         tw_event *e; 
         aspen_svr_msg *m;
-        tw_stime compute_data; 
+        tw_stime data_time; 
 
         // skew each data event slightly to help avoid event ties later on
         data_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
@@ -388,8 +398,8 @@ static void handle_ack_event(
         e = codes_event_new(0, data_time, lp);
         // after event is created, grab the allocated message and set msg-specific\
          * data
-        m->start_time = ns->start_ts;
-        m->end_time = ns->end_ts;
+        m->start_ts = ns->start_ts;
+        m->end_ts = ns->end_ts;
         m = tw_event_data(e);
         m->aspen_svr_event_type = DATA;
         // event is ready to be processed, send it off
@@ -437,12 +447,28 @@ static void handle_computation_event(
 {
     // Add code to define computation behavior here:
     if (!g_tw_mynode && !lp->gid){
+        char ** buf = NULL;
+        int size = -1;
+        unsigned int i;
         fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
         assert(m->src == lp->gid);
         // TODO: Perform the Aspen computation here, and tally up the total runtime.
-        
+        totalRuntime += ns->end_global - ns->start_global;
+        size = getSockets(Aspen_Mach_Path, &buf);
+        assert(size != -1);
+        for (i = 0; i < size; i++)
+        {
+           printf("%d: %s\n", i, buf[i]); 
+        }
+        printf("Enter the desired socket on which to perform calculations (number):\n");
+        scanf("%d", &i);
+        assert (i < size);
+        totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, buf[i]);
+        printf("The total runtime (so far) is %.6f seconds.\n", totalRuntime);
+        m->incremented_flag = i;        /* Save the last socket that was used */
+        // TODO: Make sure that buf is properly deallocated to avoid memory leaks
     } 
-    // Non-master LPs should never receive this event
+    // Non-master LPs should never receive this event, so exit if they do.
     else
     {
         fprintf(stderr,"ERROR: Slave LP %lu\n has somehow received a handle computation event!\n",lp->gid);
@@ -461,6 +487,7 @@ static void handle_data_event(
 {
     /* Make sure that the lp receiving this event is the 0 LP */
     assert(!lp->gid);
+    b->c2 = 0;
     if (m->start_ts > ns->start_global)
     {
         b->c0 = 1;
@@ -481,12 +508,26 @@ static void handle_data_event(
     }
     ns->data_recvd ++;
     // When the last one has been received, send a self message for aspen computation
-    // and compare your own timestamps (on the condition that you have also finished)
-    // Might need a conditional check in the ack_handler for this, in case things happen
-    // in a slightly different order.
-    if ()
+    if (ns->data_recvd == ttl_lps)
     {
-        // TODO
+        fprintf(stderr, "INFO: LP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
+                lp->gid);
+        tw_event *e; 
+        aspen_svr_msg *m;
+        tw_stime compute_time; 
+
+        // skew each data event slightly to help avoid event ties later on
+        compute_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
+
+        // first create the event (time arg is an offset, not absolute time)
+        e = codes_event_new(0, compute_time, lp);
+        // after event is created, grab the allocated message and set msg-specific\
+         * data
+        m = tw_event_data(e);
+        m->aspen_svr_event_type = ASPENCOMP;
+        // event is ready to be processed, send it off
+        tw_event_send(e);
+        b->c2 = 1;
     }
     return;
 }
@@ -556,7 +597,13 @@ static void handle_computation_rev_event(
     aspen_svr_msg * m,
     tw_lp * lp)
 {
-
+    char ** buf = NULL;
+    int size = -1;
+    unsigned int i;
+    totalRuntime -= ns->end_global - ns->start_global;
+    size = getSockets(Aspen_Mach_Path, &buf);
+    totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, buf[m->incremented_flag]);
+    // TODO: Make sure that buf is properly deallocated to avoid memory leaks?
     return;
 }
 
@@ -573,12 +620,12 @@ static void handle_data_rev_event(
     {
         swap_start(ns, m);
     }
-    if (bf->c1)
+    if (b->c1)
     {
         swap_end(ns, m);
     }
     ns->data_recvd --;
-    // TODO: Add check for final self comparison here!
+    if (b->c2) tw_rand_reverse_unif(lp->rng);
     return;
 }
 
