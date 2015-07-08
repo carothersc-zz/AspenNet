@@ -400,10 +400,10 @@ static void handle_ack_event(
         e = codes_event_new(0, data_time, lp);
         // after event is created, grab the allocated message and set msg-specific\
          * data
-        m->start_ts = ns->start_ts;
-        m->end_ts = ns->end_ts;
         m = tw_event_data(e);
         m->aspen_svr_event_type = DATA;
+        m->start_ts = ns->start_ts;
+        m->end_ts = ns->end_ts;
         // event is ready to be processed, send it off
         tw_event_send(e);
     }
@@ -455,7 +455,7 @@ static void handle_computation_event(
         fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
         assert(m->src == lp->gid);
         // TODO: Perform the Aspen computation here, and tally up the total runtime.
-        totalRuntime += ns->end_global - ns->start_global;
+        totalRuntime += ns_to_s(ns->end_global - ns->start_global);
         size = getSockets(Aspen_Mach_Path, &buf);
         assert(size != -1);
         for (i = 0; i < size; i++)
@@ -465,11 +465,11 @@ static void handle_computation_event(
         printf("Enter the desired socket on which to perform calculations (number):\n");
         scanf("%d", &i);
         assert (i < size);
-        fprintf(stderr, "INFO: The network time elapsed is: %.32f\n\
-                The start and end values are: %.32f and %.32f\n",\
+        fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
+                The start and end values are: %f ns and %f ns\n",\
                 (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
         totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, buf[i]);
-        fprintf(stderr, "INFO: The total runtime (so far) is %.6f seconds.\n", totalRuntime);
+        fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
         m->incremented_flag = i;        /* Save the last socket that was used */
         // TODO: Make sure that buf is properly deallocated to avoid memory leaks
     } 
