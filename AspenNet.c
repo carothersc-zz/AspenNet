@@ -27,10 +27,11 @@
 // Prototypes for extern C functions:
 extern double runtimeCalc(char *a, char *m, char * socket);
 extern int getSockets(char *m, char*** buf);
-float runningTime = 0;  /* Use this global float, which only \
-                        the LP with gid = 0 will update to keep \
-                        track of the total runtime of the Aspen \
-                        & network simulation. */
+tw_stime earliestStart = 100000;  /* Global value to keep track of 
+                         * smallest start time of any LP */
+tw_stime latestFinish = 0;  /* Global value for latest end
+                             * time of any LP */
+
 int main(
     int argc,
     char *argv[])
@@ -45,7 +46,6 @@ int main(
     /* ROSS initialization function calls */
     tw_opt_add(app_opt); /* add user-defined args */
     /* initialize ROSS and parse args. NOTE: tw_init calls MPI_Init */
-    printf("Argc = %d", argc);
     tw_init(&argc, &argv); 
     if (!conf_file_name[0]) 
     {
@@ -293,6 +293,12 @@ static void handle_kickoff_event(
     m_local.src = lp->gid;
     m_remote.aspen_svr_event_type = REQ;
     m_remote.src = lp->gid;
+    
+    fprintf(stderr,"This LP has gid: %lu and local id: %lu. Node id: %lu\n\
+            The total number of server LPs is: %lu.\n\
+            The offset is: %d\n\
+            The number of PEs is: %d\n.",\
+            lp->gid, lp->id, g_tw_mynode, g_tw_nlp, g_tw_lp_offset, g_tw_npe);
 
     /* record when transfers started on this server */
     ns->start_ts = tw_now(lp);
@@ -370,6 +376,24 @@ static void handle_ack_event(
 	/* threshold count reached, stop sending messages */
         m->incremented_flag = 0;
         ns->end_ts = tw_now(lp);
+        /* Send a message to LP 0 conatining your start and end times: */
+        tw_event *e; 
+        aspen_svr_msg *m;
+        tw_stime compute_data; 
+
+        // skew each data event slightly to help avoid event ties later on
+        data_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
+
+        // first create the event (time arg is an offset, not absolute time)
+        e = codes_event_new(0, data_time, lp);
+        // after event is created, grab the allocated message and set msg-specific\
+         * data
+        m->start_time = ns->start_ts;
+        m->end_time = ns->end_ts;
+        m = tw_event_data(e);
+        m->aspen_svr_event_type = DATA;
+        // event is ready to be processed, send it off
+        tw_event_send(e);
     }
     return;
 }
@@ -392,7 +416,7 @@ static void handle_req_event(
     /* safety check that this request got to the right server */
     
     assert(lp->gid == (m->src + offset)%(num_servers*2) &&
-           lp->gid == get_next_server(m->src));
+         lp->gid == get_next_server(m->src));
     ns->msg_recvd_count++;
 
     /* send ack back */
@@ -402,28 +426,6 @@ static void handle_req_event(
    
     model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
-    /* If we've received and sent all the messages we planned to,
-     * go into the AspenComp phase: */
-    if (ns->msg_sent_count = num_reqs && ns->msg_recvd_count == num_reqs)
-    {
-        tw_event *e; 
-        aspen_svr_msg *m;
-        tw_stime compute_time;
-        
-        memset(ns, 0, sizeof(*ns));
-
-        /* skew each kickoff event slightly to help avoid event ties later on */
-        kickoff_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
-
-        /* first create the event (time arg is an offset, not absolute time) */
-        e = codes_event_new(lp->gid, kickoff_time, lp);
-        /* after event is created, grab the allocated message and set msg-specific
-         * data */ 
-        m = tw_event_data(e);
-        m->aspen_svr_event_type = KICKOFF;
-        /* event is ready to be processed, send it off */
-        tw_event_send(e);
-    }
     return;
 }
 
@@ -435,13 +437,56 @@ static void handle_computation_event(
 {
     // Add code to define computation behavior here:
     if (!g_tw_mynode && !lp->gid){
-        printf("Master LP %lu\n",lp->gid);
-
+        fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
+        assert(m->src == lp->gid);
+        // TODO: Perform the Aspen computation here, and tally up the total runtime.
+        
     } 
-    // Non-master LPs need to perform an MPI block and wait for the master LP to perform its computation estimation:
+    // Non-master LPs should never receive this event
     else
     {
-        printf("Slave LP %lu\n",lp->gid);
+        fprintf(stderr,"ERROR: Slave LP %lu\n has somehow received a handle computation event!\n",lp->gid);
+        exit(EXIT_FAILURE);
+    }
+    return;
+}
+
+
+
+static void handle_data_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    /* Make sure that the lp receiving this event is the 0 LP */
+    assert(!lp->gid);
+    if (m->start_ts > ns->start_global)
+    {
+        b->c0 = 1;
+        swap_start(ns, m);
+    }
+    else 
+    {
+        b->c0 = 0;
+    }
+    if (m->end_ts > ns->end_global)
+    {
+        b->c1 = 1;
+        swap_end(ns, m);
+    }
+    else
+    {
+        b->c1 = 0;
+    }
+    ns->data_recvd ++;
+    // When the last one has been received, send a self message for aspen computation
+    // and compare your own timestamps (on the condition that you have also finished)
+    // Might need a conditional check in the ack_handler for this, in case things happen
+    // in a slightly different order.
+    if ()
+    {
+        // TODO
     }
     return;
 }
@@ -499,30 +544,44 @@ static void handle_ack_rev_event(
     {
         model_net_event_rc(net_id, lp, payload_sz);
         ns->msg_sent_count--;
+        tw_rand_reverse_unif(lp->rng);
     }
     return;
 }
 
+/* reverse handler for aspen computation */
 static void handle_computation_rev_event(
     aspen_svr_state * ns,
     tw_bf * b,
     aspen_svr_msg * m,
     tw_lp * lp)
 {
-    // Add code to define computation behavior here:
-    if (!g_tw_mynode && !lp->gid){
-        printf("Master LP %lu)\n",lp->gid);
 
-    } 
-    // Non-master LPs need to perform an MPI block and wait for the master LP to perform its computation estimation
-    // NOTE: this is actually not feasible, since there are several LPs per MPI rank.
-    // Need to do something like forcing a gvt update in ROSS...
-    else
-    {
-        printf("Slave LP %lu)\n",lp->gid);
-    }
     return;
 }
+
+/* reverse handler for data passing: */
+static void handle_data_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    /* There's really not much to do here...just roll back to the \
+     * previous start and end times and decrement the data_recvd counter. */
+    if (b->c0)
+    {
+        swap_start(ns, m);
+    }
+    if (bf->c1)
+    {
+        swap_end(ns, m);
+    }
+    ns->data_recvd --;
+    // TODO: Add check for final self comparison here!
+    return;
+}
+
 
 /*
  * Local variables:

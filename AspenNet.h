@@ -53,9 +53,8 @@ enum svr_event
     REQ,        /* request event */
     ACK,        /* ack event */
     LOCAL,      /* local event */
-    ASPENCOMP   /* event during which Aspen will be called */
-    // TODO: Add an event here for ASPEN computation/estimation
-    // LOCAL event may be able to be reused for this...
+    ASPENCOMP,  /* event during which Aspen will be called */
+    DATA        /* Send start and end timestamps to the 0 LP */
 };
 
 /* this struct serves as the ***persistent*** state of the LP representing the 
@@ -68,6 +67,11 @@ struct svr_state
     int local_recvd_count; /* number of local messages received */
     tw_stime start_ts;    /* time that we started sending requests */
     tw_stime end_ts;      /* time that last request finished */
+    tw_stime start_global;  /* global earliest start time */
+    tw_stime end_global;    /* global latest end time */
+    /* Note that the globals above are obviously not global,
+     * but need to be stored here for purposes of reverse event handling */ 
+    unsigned int data_recvd; /* counter for data sent to LP 0 */
     // TODO: Add a way to count wall time, or add the Aspen-generated time to
     //  the tw_stime delta at the end of the simulation
 };
@@ -80,6 +84,8 @@ struct svr_msg
     tw_lpid src;          /* source of this request or ack */
 
     int incremented_flag; /* helper for reverse computation */
+    tw_stime start_ts;    /* storage of start time for data */
+    tw_stime end_ts;      /* storage of end time for data */
 };
 
 /* ROSS expects four functions per LP:
@@ -144,6 +150,11 @@ static void handle_local_event(
     tw_bf * b,
     aspen_svr_msg * m,
    tw_lp * lp);
+static void handle_data_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
 static void handle_computation_event(
     aspen_svr_state * ns,
     tw_bf * b,
@@ -169,6 +180,11 @@ static void handle_req_rev_event(
     tw_bf * b,
     aspen_svr_msg * m,
     tw_lp * lp);
+static void handle_data_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
 static void handle_computation_rev_event(
     aspen_svr_state * ns,
     tw_bf * b,
@@ -188,6 +204,23 @@ static char conf_file_name[256] = {0};
 /* this struct contains default parameters used by ROSS, as well as
  * user-specific arguments to be handled by the ROSS config sys. Pass it in
  * prior to calling tw_init */
+
+/* two value-swapper functions for processing the start and end 
+ * timestamps received in data events */
+inline void swap_start(aspen_srv_state * ns, aspen_svr_msg * m)
+{
+    tw_stime temp = ns->start_global;
+    ns->start_global = m->start_ts;
+    m->start_ts = temp;
+}
+
+inline void swap_end(aspen_srv_state * ns, aspen_svr_msg * m)
+{
+    tw_stime temp = ns->end_global;
+    ns->end_global = m->end_ts;
+    m->end_ts = temp;
+}
+
 const tw_optdef app_opt [] =
 {
 	TWOPT_GROUP("Model net test case" ),
