@@ -110,7 +110,8 @@ int main(
     printf("The size of a server message is: %d.\n",sizeof(aspen_svr_msg));
 
     ttl_lps = tw_nnodes() * g_tw_npe * g_tw_nlp/2;
-    
+ 
+    /* TODO: The following is something of a hack...need to research the error caused without it. */
     g_tw_msg_sz = 512;
 
     /* begin simulation */ 
@@ -386,6 +387,7 @@ static void handle_ack_event(
 	/* threshold count reached, stop sending messages */
         m->incremented_flag = 0;
         ns->end_ts = tw_now(lp);
+        fprintf(stderr, "INFO: LP %lu has just recorded end time of %f.\n", lp->gid, ns->end_ts);
         /* Send a message to LP 0 conatining your start and end times: */
         tw_event *e; 
         aspen_svr_msg *m;
@@ -463,8 +465,11 @@ static void handle_computation_event(
         printf("Enter the desired socket on which to perform calculations (number):\n");
         scanf("%d", &i);
         assert (i < size);
+        fprintf(stderr, "INFO: The network time elapsed is: %.32f\n\
+                The start and end values are: %.32f and %.32f\n",\
+                (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
         totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, buf[i]);
-        printf("The total runtime (so far) is %.6f seconds.\n", totalRuntime);
+        fprintf(stderr, "INFO: The total runtime (so far) is %.6f seconds.\n", totalRuntime);
         m->incremented_flag = i;        /* Save the last socket that was used */
         // TODO: Make sure that buf is properly deallocated to avoid memory leaks
     } 
@@ -525,6 +530,7 @@ static void handle_data_event(
          * data
         m = tw_event_data(e);
         m->aspen_svr_event_type = ASPENCOMP;
+        m->src = lp->gid;
         // event is ready to be processed, send it off
         tw_event_send(e);
         b->c2 = 1;
