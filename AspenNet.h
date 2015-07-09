@@ -28,6 +28,7 @@ char Aspen_Socket[100];         // Global for name of socket to be used
 // TODO: Do something better than having a hard-coded length...
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
+static int num_rounds = 0; /* number of computation-simulation rounds to perform (read from config) */
 
 /* model-net ID, can be either simple-net, dragonfly or torus (more may be
  * added) */
@@ -41,12 +42,14 @@ static unsigned int ttl_lps = 0;
 static char *group_name = "ASPEN_SERVERS";
 /* expected parameter group name for rounds of communication */
 static char *param_group_nm = "server_pings";
+static char *misc_param_gp_nm = "PARAMS";
 static char *num_reqs_key = "num_reqs";
 static char *payload_sz_key = "payload_sz";
 static char *aspen_group_nm = "ASPEN_PARAMS";
 static char *aspen_app_key = "aspen_app_path";
 static char *aspen_mach_key = "aspen_mach_path";
 static char *aspen_socket_key = "socket_choice";
+static char *num_rounds_key = "num_rounds";
 
 typedef struct svr_msg aspen_svr_msg;
 typedef struct svr_state aspen_svr_state;

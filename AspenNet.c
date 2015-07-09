@@ -31,6 +31,8 @@ tw_stime totalRuntime = 0;  /* Global value to keep track of total runtime */
 unsigned int lastSocket = 0; /*The last socket that was used */
 unsigned int computationRollbacks = 0; /* Global value to specifically keep
                                         * track of ASPENCOMP rollbacks */
+unsigned int roundsExecuted = 0;         /* Global value to keep track of the # of
+                                          * network-computation rounds performed */
 
 int main(
     int argc,
@@ -110,6 +112,8 @@ int main(
         configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100); 
         configuration_get_value(&config, aspen_group_nm, aspen_socket_key, NULL, &Aspen_Socket, 100);
         // TODO: remove hard-coded length of 100!
+        configuration_get_value_int(&config, misc_param_gp_nm, num_rounds_key, NULL, &num_rounds);
+        fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
         fprintf(stderr, "INFO: Aspen app model path loaded: %s\n"\
                 "INFO: Aspen machine model path loaded: %s\n"\
                 "INFO: Aspen socket choice loaded: %s\n",\
@@ -170,6 +174,7 @@ static void aspen_svr_init(
      * data */ 
     m = tw_event_data(e);
     m->aspen_svr_event_type = KICKOFF;
+    m->src = lp->id;
     /* event is ready to be processed, send it off */
     tw_event_send(e);
 
@@ -330,6 +335,9 @@ static void handle_kickoff_event(
 
     /* record when transfers started on this server */
     ns->start_ts = tw_now(lp);
+    /* adding this reset in for multi-round simulations \
+     * TODO: will need to add some way to reverse this in the rev_handler! */
+    ns->msg_sent_count = 0;
 
     /* each server sends a request to the next highest server 
      * In this simulation, LP determination is simple: LPs are assigned
@@ -458,28 +466,6 @@ static void handle_req_event(
     return;
 }
 
-static void handle_computation_event(
-    aspen_svr_state * ns,
-    tw_bf * b,
-    aspen_svr_msg * m,
-    tw_lp * lp)
-{
-    // Add code to define computation behavior here:
-    // Non-master LPs should never receive this event, so exit if they do.
-    assert(!g_tw_mynode && !lp->gid);
-    fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
-    assert(m->src == lp->gid);
-    totalRuntime += ns_to_s(ns->end_global - ns->start_global);
-    fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
-            The start and end values are: %f ns and %f ns\n",\
-            (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
-    totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
-    fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
-    return;
-}
-
-
-
 static void handle_data_event(
     aspen_svr_state * ns,
     tw_bf * b,
@@ -530,6 +516,54 @@ static void handle_data_event(
         // event is ready to be processed, send it off
         tw_event_send(e);
         b->c2 = 1;
+    }
+    return;
+}
+
+
+static void handle_computation_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    // Add code to define computation behavior here:
+    // Non-master LPs should never receive this event, so exit if they do.
+    assert(!g_tw_mynode && !lp->gid);
+    fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
+    assert(m->src == lp->gid);
+    totalRuntime += ns_to_s(ns->end_global - ns->start_global);
+    fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
+            The start and end values are: %f ns and %f ns\n",\
+            (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
+    totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
+    roundsExecuted ++;
+    ns->data_recvd = 0; /* TODO: Make this reverse handler-safe! */
+    if (roundsExecuted < num_rounds)
+    {
+        /* There are more rounds to simulate, so send kickoffs to all LPs */
+        tw_lpid i = 0;
+        tw_lp * other_lp = NULL;
+        for ( ; i < ttl_lps * 2; i+=2) // TODO: make the increment based on lp settings in config!
+        {
+            tw_event *e; 
+            aspen_svr_msg *m;
+            tw_stime kickoff_time;
+            
+            /* skew each kickoff event slightly to help avoid event ties later on */
+            kickoff_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
+
+            /* first create the event (time arg is an offset, not absolute time) */
+            e = codes_event_new(i, kickoff_time, lp);
+            /* after event is created, grab the allocated message and set msg-specific
+             * data */ 
+            m = tw_event_data(e);
+            m->aspen_svr_event_type = KICKOFF;
+            m->src = lp->id;
+            /* event is ready to be processed, send it off */
+            tw_event_send(e);
+        }
     }
     return;
 }
