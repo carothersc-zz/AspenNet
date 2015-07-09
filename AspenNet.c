@@ -102,24 +102,32 @@ int main(
      * go ahead and read them prior to running */
     configuration_get_value_int(&config, param_group_nm, num_reqs_key, NULL, &num_reqs);
     configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
-    if (g_tw_mynode == 0) {
+    if (g_tw_mynode == 0) 
+    {
         configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, &Aspen_App_Path, 100);
-        configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100);
+        configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100); 
+        configuration_get_value(&config, aspen_group_nm, aspen_socket_key, NULL, &Aspen_Socket, 100);
         // TODO: remove hard-coded length of 100!
+        fprintf(stderr, "INFO: Aspen app model path loaded: %s\n"\
+                "INFO: Aspen machine model path loaded: %s\n"\
+                "INFO: Aspen socket choice loaded: %s\n",\
+                Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
     }
-    printf("The size of a server message is: %d.\n",sizeof(aspen_svr_msg));
-
+    
+    /* calculate the total number of server lps (this may not work in\
+     * cases with an uneven number of lps total) */
     ttl_lps = tw_nnodes() * g_tw_npe * g_tw_nlp/2;
  
-    /* TODO: The following is something of a hack...need to research the error caused without it. */
-    g_tw_msg_sz = 512;
-
     /* begin simulation */ 
     tw_run();
 
     /* model-net has the capability of outputting network transmission stats */
     model_net_report_stats(net_id);
-
+    if (g_tw_mynode == 0)
+    {
+         printf("FINAL REPORT: The final runtime for 1 network burst and 1 computation "\
+                "burst is %f seconds.\n", totalRuntime);   
+    }
     tw_end();
     return 0;
 }
@@ -455,29 +463,15 @@ static void handle_computation_event(
 {
     // Add code to define computation behavior here:
     if (!g_tw_mynode && !lp->gid){
-        char ** buf = NULL;
-        int size = -1;
         unsigned int i;
         fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
         assert(m->src == lp->gid);
-        // TODO: Perform the Aspen computation here, and tally up the total runtime.
         totalRuntime += ns_to_s(ns->end_global - ns->start_global);
-        size = getSockets(Aspen_Mach_Path, &buf);
-        assert(size != -1);
-        for (i = 0; i < size; i++)
-        {
-           printf("%d: %s\n", i, buf[i]); 
-        }
-        printf("Enter the desired socket on which to perform calculations (number):\n");
-        scanf("%d", &i);
-        assert (i < size);
         fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
                 The start and end values are: %f ns and %f ns\n",\
                 (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
-        totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, buf[i]);
+        totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
         fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
-        m->incremented_flag = i;        /* Save the last socket that was used */
-        // TODO: Make sure that buf is properly deallocated to avoid memory leaks
     } 
     // Non-master LPs should never receive this event, so exit if they do.
     else
@@ -609,13 +603,10 @@ static void handle_computation_rev_event(
     aspen_svr_msg * m,
     tw_lp * lp)
 {
-    char ** buf = NULL;
-    int size = -1;
-    unsigned int i;
-    totalRuntime -= ns->end_global - ns->start_global;
-    size = getSockets(Aspen_Mach_Path, &buf);
-    totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, buf[m->incremented_flag]);
-    // TODO: Make sure that buf is properly deallocated to avoid memory leaks?
+    //totalRuntime -= (ns->end_global - ns->start_global);
+    //totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    totalRuntime = 0;   /* TODO: Get reverse aspencomp working properly so we can
+                         * do multiple rounds of network and computation bursts! */ 
     return;
 }
 

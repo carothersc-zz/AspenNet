@@ -18,11 +18,13 @@
 #include <ross.h>
 
 // NOTE: the config file should contain the paths to the aspen kernel model(s)
-// and hardware model
+// and hardware model, as well as the socket on which the kernel model should be
+// evaluated.
 
 static int socket;     // Global int for the socket to be used (perhaps this should be configure in the conf file?)
 char Aspen_Mach_Path[100];      // Global for path and name of Aspen model
 char Aspen_App_Path[100];        // Global for path and name of Aspen application/kernel
+char Aspen_Socket[100];         // Global for name of socket to be used
 // TODO: Do something better than having a hard-coded length...
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
@@ -44,6 +46,7 @@ static char *payload_sz_key = "payload_sz";
 static char *aspen_group_nm = "ASPEN_PARAMS";
 static char *aspen_app_key = "aspen_app_path";
 static char *aspen_mach_key = "aspen_mach_path";
+static char *aspen_socket_key = "socket_choice";
 
 typedef struct svr_msg aspen_svr_msg;
 typedef struct svr_state aspen_svr_state;
@@ -74,8 +77,6 @@ struct svr_state
     /* Note that the globals above are obviously not global,
      * but need to be stored here for purposes of reverse event handling */ 
     unsigned int data_recvd; /* counter for data sent to LP 0 */
-    // TODO: Add a way to count wall time, or add the Aspen-generated time to
-    //  the tw_stime delta at the end of the simulation
 };
 
 /* this struct serves as the ***temporary*** event data, which can be thought
