@@ -209,6 +209,9 @@ static void aspen_svr_event(
         case ASPENCOMP:
             handle_computation_event(ns, b, m, lp);
 	    break;
+        case RESTART:
+            handle_restart_event(ns, b, m, lp);
+            break;
         default:
 	    printf("\n Invalid message type %d ", m->aspen_svr_event_type);
             assert(0);
@@ -243,6 +246,9 @@ static void aspen_svr_rev_event(
             break;
         case ASPENCOMP:
             handle_computation_rev_event(ns, b, m, lp);
+            break;
+        case RESTART:
+            handle_restart_rev_event(ns, b, m, lp);
             break;
         default:
             assert(0);
@@ -327,17 +333,14 @@ static void handle_kickoff_event(
     m_remote.aspen_svr_event_type = REQ;
     m_remote.src = lp->gid;
     
-    fprintf(stderr,"This LP has gid: %lu and local id: %lu. Node id: %lu\n\
-            The total number of server LPs is: %lu.\n\
-            The offset is: %lu\n\
-            The number of PEs is: %lu\n.",\
+    fprintf(stderr,"INFO: This LP has gid: %lu and local id: %lu. Node id: %lu\n"\
+            "\tThe total number of server LPs is: %lu.\n"\
+            "\tThe offset is: %lu\n"\
+            "\tThe number of PEs is: %lu\n",\
             lp->gid, lp->id, g_tw_mynode, g_tw_nlp, g_tw_lp_offset, g_tw_npe);
 
     /* record when transfers started on this server */
     ns->start_ts = tw_now(lp);
-    /* adding this reset in for multi-round simulations \
-     * TODO: will need to add some way to reverse this in the rev_handler! */
-    ns->msg_sent_count = 0;
 
     /* each server sends a request to the next highest server 
      * In this simulation, LP determination is simple: LPs are assigned
@@ -357,6 +360,61 @@ static void handle_kickoff_event(
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     ns->msg_sent_count++;
 }
+
+static void handle_restart_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    int dest_id;
+    int use_brute_force_map = 0;
+    /* normally, when using ROSS, events are allocated as a result of the event
+     * creation process. However, since we are now asking model-net to
+     * communicate with an entity on our behalf, we need to generate both the
+     * message to the recipient and an optional callback message 
+     * - thankfully, memory need not persist past the model_net_event call - it
+     *   copies the messages */
+    aspen_svr_msg m_local;
+    aspen_svr_msg m_remote;
+
+    m_local.aspen_svr_event_type = LOCAL;
+    m_local.src = lp->gid;
+    m_remote.aspen_svr_event_type = REQ;
+    m_remote.src = lp->gid;
+    
+    fprintf(stderr,"INFO: This LP has gid: %lu and local id: %lu. Node id: %lu\n"\
+            "\tThe total number of server LPs is: %lu.\n"\
+            "\tThe offset is: %lu\n"\
+            "\tThe number of PEs is: %lu\n",\
+            lp->gid, lp->id, g_tw_mynode, g_tw_nlp, g_tw_lp_offset, g_tw_npe);
+
+    /* record when transfers started on this server */
+    m->start_ts = ns->start_ts;
+    ns->start_ts = tw_now(lp);
+    /* adding this reset in for multi-round simulations */
+    ns->msg_sent_count = 1;
+    ns->msg_recvd_count = 0;
+
+    /* each server sends a request to the next highest server 
+     * In this simulation, LP determination is simple: LPs are assigned
+     * round robin as in serv_1, net_1, serv_2, net_2, etc. 
+     * However, that may not always be the case, so we also show a more
+     * complicated way to map through codes_mapping */
+    if (use_brute_force_map)
+        dest_id = (lp->gid + offset)%(num_servers*2);
+    else
+    {
+        dest_id = get_next_server(lp->gid);
+    }
+
+    /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
+     * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null) */
+    model_net_event(net_id, "test", dest_id, payload_sz, 0.0, sizeof(aspen_svr_msg),
+            (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
+}
+
+
 
 /* at the moment, no need for local callbacks from model-net, so we maintain a
  * count for debugging purposes */ 
@@ -411,11 +469,12 @@ static void handle_ack_event(
     {
 	/* threshold count reached, stop sending messages */
         m->incremented_flag = 0;
+        m->end_ts = ns->end_ts;
         ns->end_ts = tw_now(lp);
         fprintf(stderr, "INFO: LP %lu has just recorded end time of %f.\n", lp->gid, ns->end_ts);
         /* Send a message to LP 0 conatining your start and end times: */
         tw_event *e; 
-        aspen_svr_msg *m;
+        aspen_svr_msg *msg;
         tw_stime data_time; 
 
         // skew each data event slightly to help avoid event ties later on
@@ -425,10 +484,10 @@ static void handle_ack_event(
         e = codes_event_new(0, data_time, lp);
         // after event is created, grab the allocated message and set msg-specific\
          * data
-        m = tw_event_data(e);
-        m->aspen_svr_event_type = DATA;
-        m->start_ts = ns->start_ts;
-        m->end_ts = ns->end_ts;
+        msg = tw_event_data(e);
+        msg->aspen_svr_event_type = DATA;
+        msg->start_ts = ns->start_ts;
+        msg->end_ts = ns->end_ts;
         // event is ready to be processed, send it off
         tw_event_send(e);
     }
@@ -527,9 +586,9 @@ static void handle_computation_event(
     aspen_svr_msg * m,
     tw_lp * lp)
 {
-    // Add code to define computation behavior here:
     // Non-master LPs should never receive this event, so exit if they do.
     assert(!g_tw_mynode && !lp->gid);
+    m->incremented_flag = 0;
     fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
     assert(m->src == lp->gid);
     totalRuntime += ns_to_s(ns->end_global - ns->start_global);
@@ -542,6 +601,7 @@ static void handle_computation_event(
     ns->data_recvd = 0; /* TODO: Make this reverse handler-safe! */
     if (roundsExecuted < num_rounds)
     {
+        m->incremented_flag = 1;
         /* There are more rounds to simulate, so send kickoffs to all LPs */
         tw_lpid i = 0;
         tw_lp * other_lp = NULL;
@@ -559,7 +619,7 @@ static void handle_computation_event(
             /* after event is created, grab the allocated message and set msg-specific
              * data */ 
             m = tw_event_data(e);
-            m->aspen_svr_event_type = KICKOFF;
+            m->aspen_svr_event_type = RESTART;
             m->src = lp->id;
             /* event is ready to be processed, send it off */
             tw_event_send(e);
@@ -610,6 +670,20 @@ static void handle_kickoff_rev_event(
     return;
 }
 
+/* reverse handler for restart */
+static void handle_restart_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    ns->start_ts = m->start_ts;
+    ns->msg_sent_count = num_reqs;
+    ns->msg_recvd_count = num_reqs;;
+    model_net_event_rc(net_id, lp, payload_sz);
+}
+
+
 /* reverse handler for ack*/
 static void handle_ack_rev_event(
     aspen_svr_state * ns,
@@ -622,6 +696,7 @@ static void handle_ack_rev_event(
         model_net_event_rc(net_id, lp, payload_sz);
         ns->msg_sent_count--;
         tw_rand_reverse_unif(lp->rng);
+        ns->end_ts = m->end_ts;
     }
     return;
 }
@@ -636,6 +711,14 @@ static void handle_computation_rev_event(
     totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
     totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
     computationRollbacks ++;
+    if (m->incremented_flag)
+    {
+        int i = 0;
+        for ( ; i < ttl_lps; i++)
+        {
+            tw_rand_reverse_unif(lp->rng);
+        }
+    }
     return;
 }
 

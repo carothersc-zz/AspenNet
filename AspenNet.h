@@ -58,6 +58,7 @@ typedef struct svr_state aspen_svr_state;
 enum svr_event
 {
     KICKOFF,    /* initial event */
+    RESTART,    /* multi-round kickoff */
     REQ,        /* request event */
     ACK,        /* ack event */
     LOCAL,      /* local event */
@@ -141,6 +142,11 @@ static void handle_kickoff_event(
     tw_bf * b,
     aspen_svr_msg * m,
     tw_lp * lp);
+static void handle_restart_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
 static void handle_ack_event(
     aspen_svr_state * ns,
     tw_bf * b,
@@ -172,6 +178,11 @@ static void handle_local_rev_event(
     aspen_svr_msg * m,
    tw_lp * lp);
 static void handle_kickoff_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp);
+static void handle_restart_rev_event(
     aspen_svr_state * ns,
     tw_bf * b,
     aspen_svr_msg * m,
