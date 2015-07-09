@@ -29,6 +29,8 @@ extern double runtimeCalc(char *a, char *m, char * socket);
 extern int getSockets(char *m, char*** buf);
 tw_stime totalRuntime = 0;  /* Global value to keep track of total runtime */
 unsigned int lastSocket = 0; /*The last socket that was used */
+unsigned int computationRollbacks = 0; /* Global value to specifically keep
+                                        * track of ASPENCOMP rollbacks */
 
 int main(
     int argc,
@@ -125,8 +127,9 @@ int main(
     model_net_report_stats(net_id);
     if (g_tw_mynode == 0)
     {
-         printf("FINAL REPORT: The final runtime for 1 network burst and 1 computation "\
-                "burst is %f seconds.\n", totalRuntime);   
+        printf("FINAL REPORT: The final runtime for 1 network burst and 1 computation "\
+               "burst is %f seconds.\n", totalRuntime);   
+        fprintf(stderr, "INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
     }
     tw_end();
     return 0;
@@ -462,23 +465,16 @@ static void handle_computation_event(
     tw_lp * lp)
 {
     // Add code to define computation behavior here:
-    if (!g_tw_mynode && !lp->gid){
-        unsigned int i;
-        fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
-        assert(m->src == lp->gid);
-        totalRuntime += ns_to_s(ns->end_global - ns->start_global);
-        fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
-                The start and end values are: %f ns and %f ns\n",\
-                (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
-        totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
-        fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
-    } 
     // Non-master LPs should never receive this event, so exit if they do.
-    else
-    {
-        fprintf(stderr,"ERROR: Slave LP %lu\n has somehow received a handle computation event!\n",lp->gid);
-        exit(EXIT_FAILURE);
-    }
+    assert(!g_tw_mynode && !lp->gid);
+    fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
+    assert(m->src == lp->gid);
+    totalRuntime += ns_to_s(ns->end_global - ns->start_global);
+    fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
+            The start and end values are: %f ns and %f ns\n",\
+            (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
+    totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
     return;
 }
 
@@ -603,10 +599,9 @@ static void handle_computation_rev_event(
     aspen_svr_msg * m,
     tw_lp * lp)
 {
-    //totalRuntime -= (ns->end_global - ns->start_global);
-    //totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
-    totalRuntime = 0;   /* TODO: Get reverse aspencomp working properly so we can
-                         * do multiple rounds of network and computation bursts! */ 
+    totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
+    totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    computationRollbacks ++;
     return;
 }
 
