@@ -537,7 +537,8 @@ static void handle_data_event(
     tw_lp * lp)
 {
     /* Make sure that the lp receiving this event is the 0 LP */
-    assert(!lp->gid);
+    assert(!lp->gid && !g_tw_mynode);
+    fprintf(stderr, "INFO: LP %lu received data event. (%u)\n", lp->gid, ns->data_recvd + 1);
     b->c2 = 0;
     if (m->start_ts > ns->start_global)
     {
@@ -561,7 +562,7 @@ static void handle_data_event(
     // When the last one has been received, send a self message for aspen computation
     if (ns->data_recvd == ttl_lps)
     {
-        fprintf(stderr, "INFO: LP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
+        fprintf(stderr, "\tLP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
                 lp->gid);
         tw_event *e; 
         aspen_svr_msg *m;
@@ -605,7 +606,7 @@ static void handle_computation_event(
     fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
     roundsExecuted ++;
     ns->data_recvd = 0; /* TODO: Make this reverse handler-safe! */
-    if (roundsExecuted < num_rounds)
+    if (roundsExecuted < num_rounds + computationRollbacks)
     {
         fprintf(stderr, "INFO: sending restart messages to LPs now!\n");
         m->incremented_flag = 1;
@@ -718,6 +719,8 @@ static void handle_data_rev_event(
 {
     /* There's really not much to do here...just roll back to the \
      * previous start and end times and decrement the data_recvd counter. */
+    assert(!lp->gid && !g_tw_mynode);
+    fprintf(stderr, "ROLLBACK: reversing data event. (%u)\n", ns->data_recvd - 1);
     if (b->c0)
     {
         swap_start(ns, m);
@@ -727,6 +730,10 @@ static void handle_data_rev_event(
         swap_end(ns, m);
     }
     ns->data_recvd --;
+    if (ns->data_recvd == 0)
+    {
+        fprintf(stderr, "\tAll data events have been reversed.\n");
+    }
     if (b->c2) tw_rand_reverse_unif(lp->rng);
     return;
 }
@@ -739,13 +746,14 @@ static void handle_computation_rev_event(
     tw_lp * lp)
 {
     assert(!lp->gid && !g_tw_mynode);
-    fprintf(stderr, "INFO: Performing reverse aspen computation.\n"\
+    fprintf(stderr, "ROLLBACK: Performing reverse aspen computation.\n"\
             "\tCurrent value is: %f\n", totalRuntime);
     totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
     totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    ns->data_recvd = ttl_lps; 
     if (totalRuntime < 0)
     {
-        fprintf(stderr, "WARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
+        fprintf(stderr, "\tWARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
         totalRuntime = 0;
     }
     computationRollbacks ++;
