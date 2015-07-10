@@ -134,6 +134,11 @@ int main(
         printf("FINAL REPORT: The final runtime for 1 network burst and 1 computation "\
                "burst is %f seconds.\n", totalRuntime);   
         fprintf(stderr, "INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
+        fprintf(stderr, "INFO: Aspen computation was performed %u times.\n", roundsExecuted);
+        if (roundsExecuted == computationRollbacks)
+        {
+            fprintf(stderr, "ERROR: Aspen computation was performed a net number of 0 times!\n");
+        }
     }
     tw_end();
     return 0;
@@ -333,7 +338,7 @@ static void handle_kickoff_event(
     m_remote.aspen_svr_event_type = REQ;
     m_remote.src = lp->gid;
     
-    fprintf(stderr,"INFO: This LP has gid: %lu and local id: %lu. Node id: %lu\n"\
+    //fprintf(stderr,"INFO: This LP has gid: %lu and local id: %lu. Node id: %lu\n"\
             "\tThe total number of server LPs is: %lu.\n"\
             "\tThe offset is: %lu\n"\
             "\tThe number of PEs is: %lu\n",\
@@ -471,7 +476,7 @@ static void handle_ack_event(
         m->incremented_flag = 0;
         m->end_ts = ns->end_ts;
         ns->end_ts = tw_now(lp);
-        fprintf(stderr, "INFO: LP %lu has just recorded end time of %f.\n", lp->gid, ns->end_ts);
+        //fprintf(stderr, "INFO: LP %lu has just recorded end time of %f.\n", lp->gid, ns->end_ts);
         /* Send a message to LP 0 conatining your start and end times: */
         tw_event *e; 
         aspen_svr_msg *msg;
@@ -732,9 +737,18 @@ static void handle_computation_rev_event(
     aspen_svr_msg * m,
     tw_lp * lp)
 {
+    assert(!lp->gid && !g_tw_mynode);
+    fprintf(stderr, "INFO: Performing reverse aspen computation.\n"\
+            "\tCurrent value is: %f\n", totalRuntime);
     totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
     totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    if (totalRuntime < 0)
+    {
+        fprintf(stderr, "WARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
+        totalRuntime = 0;
+    }
     computationRollbacks ++;
+    fprintf(stderr, "\tAfter rollback, runtime value is: %f\n", totalRuntime);
     if (m->incremented_flag)
     {
         int i = 0;
