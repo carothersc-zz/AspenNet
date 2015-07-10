@@ -591,6 +591,7 @@ static void handle_computation_event(
     m->incremented_flag = 0;
     fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
     assert(m->src == lp->gid);
+    /* Proceed with the computation: */
     totalRuntime += ns_to_s(ns->end_global - ns->start_global);
     fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
             The start and end values are: %f ns and %f ns\n",\
@@ -604,11 +605,10 @@ static void handle_computation_event(
         m->incremented_flag = 1;
         /* There are more rounds to simulate, so send kickoffs to all LPs */
         tw_lpid i = 0;
-        tw_lp * other_lp = NULL;
         for ( ; i < ttl_lps * 2; i+=2) // TODO: make the increment based on lp settings in config!
         {
             tw_event *e; 
-            aspen_svr_msg *m;
+            aspen_svr_msg *msg;
             tw_stime kickoff_time;
             
             /* skew each kickoff event slightly to help avoid event ties later on */
@@ -618,9 +618,9 @@ static void handle_computation_event(
             e = codes_event_new(i, kickoff_time, lp);
             /* after event is created, grab the allocated message and set msg-specific
              * data */ 
-            m = tw_event_data(e);
-            m->aspen_svr_event_type = RESTART;
-            m->src = lp->id;
+            msg = tw_event_data(e);
+            msg->aspen_svr_event_type = RESTART;
+            msg->src = lp->id;
             /* event is ready to be processed, send it off */
             tw_event_send(e);
         }
@@ -652,7 +652,6 @@ static void handle_req_rev_event(
     ns->msg_recvd_count--;
     /* model-net has its own reverse computation support */ 
     model_net_event_rc(net_id, lp, payload_sz);
-
     return;
 }
 
@@ -679,7 +678,7 @@ static void handle_restart_rev_event(
 {
     ns->start_ts = m->start_ts;
     ns->msg_sent_count = num_reqs;
-    ns->msg_recvd_count = num_reqs;;
+    ns->msg_recvd_count = num_reqs;
     model_net_event_rc(net_id, lp, payload_sz);
 }
 
@@ -696,28 +695,10 @@ static void handle_ack_rev_event(
         model_net_event_rc(net_id, lp, payload_sz);
         ns->msg_sent_count--;
         tw_rand_reverse_unif(lp->rng);
-        ns->end_ts = m->end_ts;
     }
-    return;
-}
-
-/* reverse handler for aspen computation */
-static void handle_computation_rev_event(
-    aspen_svr_state * ns,
-    tw_bf * b,
-    aspen_svr_msg * m,
-    tw_lp * lp)
-{
-    totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
-    totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
-    computationRollbacks ++;
-    if (m->incremented_flag)
+    else
     {
-        int i = 0;
-        for ( ; i < ttl_lps; i++)
-        {
-            tw_rand_reverse_unif(lp->rng);
-        }
+        ns->end_ts = m->end_ts;
     }
     return;
 }
@@ -741,6 +722,27 @@ static void handle_data_rev_event(
     }
     ns->data_recvd --;
     if (b->c2) tw_rand_reverse_unif(lp->rng);
+    return;
+}
+
+/* reverse handler for aspen computation */
+static void handle_computation_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
+    totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    computationRollbacks ++;
+    if (m->incremented_flag)
+    {
+        int i = 0;
+        for ( ; i < ttl_lps; i++)
+        {
+            tw_rand_reverse_unif(lp->rng);
+        }
+    }
     return;
 }
 
