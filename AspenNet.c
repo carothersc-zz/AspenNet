@@ -135,9 +135,9 @@ int main(
                "burst is %f seconds.\n", totalRuntime);   
         fprintf(stderr, "INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
         fprintf(stderr, "INFO: Aspen computation was performed %u times.\n", roundsExecuted);
-        if (roundsExecuted == computationRollbacks)
+        if (roundsExecuted != num_rounds + computationRollbacks)
         {
-            fprintf(stderr, "ERROR: Aspen computation was performed a net number of 0 times!\n");
+            fprintf(stderr, "ERROR: Aspen computation was performed an incorrect number of times!\n");
         }
     }
     tw_end();
@@ -388,7 +388,7 @@ static void handle_restart_event(
     m_remote.aspen_svr_event_type = REQ;
     m_remote.src = lp->gid;
     
-    fprintf(stderr,"INFO: This LP has gid: %lu and local id: %lu. Node id: %lu\n"\
+    //fprintf(stderr,"INFO: This LP has gid: %lu and local id: %lu. Node id: %lu\n"\
             "\tThe total number of server LPs is: %lu.\n"\
             "\tThe offset is: %lu\n"\
             "\tThe number of PEs is: %lu\n",\
@@ -607,6 +607,7 @@ static void handle_computation_event(
     ns->data_recvd = 0; /* TODO: Make this reverse handler-safe! */
     if (roundsExecuted < num_rounds)
     {
+        fprintf(stderr, "INFO: sending restart messages to LPs now!\n");
         m->incremented_flag = 1;
         /* There are more rounds to simulate, so send kickoffs to all LPs */
         tw_lpid i = 0;
