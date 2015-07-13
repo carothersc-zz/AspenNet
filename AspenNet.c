@@ -156,8 +156,8 @@ int main(
     model_net_report_stats(net_id);
     if (g_tw_mynode == 0)
     {
-        printf("FINAL REPORT: The final runtime for 1 network burst and 1 computation "\
-               "burst is %f seconds.\n", totalRuntime);   
+        printf("FINAL REPORT: The final runtime for the application "\
+               "kernel(s) is %f seconds.\n", totalRuntime);   
         fprintf(stderr, "INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
         fprintf(stderr, "INFO: Aspen computation was performed %u times.\n", roundsExecuted);
         if (roundsExecuted != num_rounds + computationRollbacks)
