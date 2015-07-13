@@ -105,14 +105,14 @@ int main(
      * server message parameters. Since they are constant for all LPs,
      * go ahead and read them prior to running */
     configuration_get_value_int(&config, param_group_nm, num_reqs_key, NULL, &num_reqs);
-    fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
     configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
     if (g_tw_mynode == 0) 
     {
         int i = 0;
         configuration_get_value_int(&config, misc_param_gp_nm, num_rounds_key, NULL, &num_rounds);
+        fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
         // TODO: Make sure that the memory is freed!
-        Aspen_App_Path = malloc((num_rounds+1) * sizeof(char*));
+        Aspen_App_Path = calloc(num_rounds+1, sizeof(char*));
         fprintf(stderr,"This should be an address: %x\n", Aspen_App_Path[0]);
         Aspen_App_Path[num_rounds] = '\0';
         if (num_rounds > 1)
@@ -166,15 +166,16 @@ int main(
         }
     }
     tw_end();
-    /*if (num_rounds > 1)
+    if (g_tw_mynode == 0)
     {
-        int i = 0;
+        int i = 1;
+        free(Aspen_App_Path[0]);
         for (; i < num_rounds; i++)
         {
             free(Aspen_App_Path[i]);
         }
+        free(Aspen_App_Path);
     }
-    free(Aspen_App_Path);*/
     return 0;
 }
 
