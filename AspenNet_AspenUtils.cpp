@@ -36,10 +36,6 @@ double runtimeCalc(char *a, char *m, char * socket)
         ASTAppModel *app = LoadAppModel(a);
         ASTMachModel *mach = LoadMachineModel(m);
         
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        srand(tv.tv_usec);
-        
         RuntimeCounter *t = new RuntimeCounter(app, mach, socket);
         t->SetCacheExecutionBlockExpressions(false);
         app->kernelMap["main"]->Traverse(t);
