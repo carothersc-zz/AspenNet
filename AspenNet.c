@@ -105,19 +105,44 @@ int main(
      * server message parameters. Since they are constant for all LPs,
      * go ahead and read them prior to running */
     configuration_get_value_int(&config, param_group_nm, num_reqs_key, NULL, &num_reqs);
+    fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
     configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
     if (g_tw_mynode == 0) 
     {
-        configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, &Aspen_App_Path, 100);
+        int i = 0;
+        configuration_get_value_int(&config, misc_param_gp_nm, num_rounds_key, NULL, &num_rounds);
+        // TODO: Make sure that the memory is freed!
+        Aspen_App_Path = malloc((num_rounds+1) * sizeof(char*));
+        fprintf(stderr,"This should be an address: %x\n", Aspen_App_Path[0]);
+        Aspen_App_Path[num_rounds] = '\0';
+        if (num_rounds > 1)
+        {
+            for (; i < num_rounds; i++)
+            {
+                aspen_app_key[14] = i + '0';
+                fprintf(stderr, "INFO: Attempting to load aspen_app_key %s\n", aspen_app_key);
+                // TODO: find a better way so that more than 9 rounds can be processed!!
+                Aspen_App_Path[i] = malloc(100 * sizeof(char));
+                configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[i], 100);      
+            }
+        }
+        else 
+        {
+            aspen_app_key[14] = '0';
+            Aspen_App_Path[0] = calloc(100, sizeof(char)); 
+            configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[0], 100);
+        }
         configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100); 
         configuration_get_value(&config, aspen_group_nm, aspen_socket_key, NULL, &Aspen_Socket, 100);
         // TODO: remove hard-coded length of 100!
-        configuration_get_value_int(&config, misc_param_gp_nm, num_rounds_key, NULL, &num_rounds);
-        fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
-        fprintf(stderr, "INFO: Aspen app model path loaded: %s\n"\
-                "INFO: Aspen machine model path loaded: %s\n"\
-                "INFO: Aspen socket choice loaded: %s\n",\
-                Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+        for (i = 0; i < num_rounds; i++)
+        {
+            fprintf(stderr,"\tAspen app model path loaded: %s\n",\
+                    Aspen_App_Path[i]);
+        }
+        fprintf(stderr, "INFO: Aspen machine model path loaded: %s\n"\
+                "\tAspen socket choice loaded: %s\n",\
+                Aspen_Mach_Path, Aspen_Socket);
     }
     
     /* calculate the total number of server lps (this may not work in\
@@ -141,6 +166,15 @@ int main(
         }
     }
     tw_end();
+    /*if (num_rounds > 1)
+    {
+        int i = 0;
+        for (; i < num_rounds; i++)
+        {
+            free(Aspen_App_Path[i]);
+        }
+    }
+    free(Aspen_App_Path);*/
     return 0;
 }
 
@@ -602,7 +636,8 @@ static void handle_computation_event(
     fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
             The start and end values are: %f ns and %f ns\n",\
             (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
-    totalRuntime += runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    totalRuntime += runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
+                                Aspen_Mach_Path, Aspen_Socket);
     fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
     roundsExecuted ++;
     ns->data_recvd = 0; /* TODO: Make this reverse handler-safe! */
@@ -749,7 +784,8 @@ static void handle_computation_rev_event(
     fprintf(stderr, "ROLLBACK: Performing reverse aspen computation.\n"\
             "\tCurrent value is: %f\n", totalRuntime);
     totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
-    totalRuntime -= runtimeCalc(Aspen_App_Path, Aspen_Mach_Path, Aspen_Socket);
+    totalRuntime -= runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
+                                Aspen_Mach_Path, Aspen_Socket);
     ns->data_recvd = ttl_lps; 
     if (totalRuntime < 0)
     {
