@@ -24,7 +24,7 @@
 static int socket;     // Global int for the socket to be used (perhaps this should be configure in the conf file?)
 char Aspen_Mach_Path[100];      // Global for path and name of Aspen model
 char **Aspen_App_Path = NULL;        // Global array for paths and names of Aspen application/kernels
-char Aspen_Socket[100];         // Global for name of socket to be used
+char **Aspen_Socket;         // Global array for names of sockets to be used
 // TODO: Do something better than having a hard-coded length...
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
@@ -48,7 +48,7 @@ static char *payload_sz_key = "payload_sz";
 static char *aspen_group_nm = "ASPEN_PARAMS";
 static char aspen_app_key[] = "aspen_app_path000";
 static char *aspen_mach_key = "aspen_mach_path";
-static char *aspen_socket_key = "socket_choice";
+static char aspen_socket_key[] = "socket_choice000";
 static char *num_rounds_key = "num_rounds";
 
 typedef struct svr_msg aspen_svr_msg;
