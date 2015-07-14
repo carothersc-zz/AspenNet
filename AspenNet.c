@@ -111,7 +111,6 @@ int main(
         int i, j, temp;
         configuration_get_value_int(&config, misc_param_gp_nm, num_rounds_key, NULL, &num_rounds);
         fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
-        // TODO: Make sure that the memory is freed!
         Aspen_App_Path = calloc(num_rounds+1, sizeof(char*));
         if (num_rounds > 1)
         {
@@ -644,7 +643,7 @@ static void handle_computation_event(
                                 Aspen_Mach_Path, Aspen_Socket);
     fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
     roundsExecuted ++;
-    ns->data_recvd = 0; /* TODO: Make this reverse handler-safe! */
+    ns->data_recvd = 0;
     if (roundsExecuted < num_rounds + computationRollbacks)
     {
         fprintf(stderr, "INFO: sending restart messages to LPs now!\n");

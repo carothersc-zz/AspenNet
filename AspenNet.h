@@ -256,7 +256,6 @@ int int_to_array(int num, char** array){
     if (count == 0) count = 1;
     *array = calloc(count, sizeof(char));
     temp = count;
-    printf("temp return should be %d\n", temp);
     while (count > 0){
         count --;
         (*array)[count] = (num % 10) + '0';
