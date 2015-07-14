@@ -19,9 +19,9 @@ int main(){
     int i;
     char **buf = NULL;
     int size = -1;
-    char* app = "./models/fft/1D_FFT.aspen";
-    char* machine = "./models/machine/llano.aspen";
-    printf("%e\n", runtimeCalc(app, machine, "amd_a8_3850_cpu"));
+    char* app = "./models/matmul/matmul.aspen";
+    char* machine = "./models/machine/BigTestRig.aspen";
+    printf("%e\n", runtimeCalc(app, machine, "amd_HD5770"));
 
     size = getSockets(machine,  &buf);
 
