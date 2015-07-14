@@ -46,7 +46,7 @@ static char *misc_param_gp_nm = "PARAMS";
 static char *num_reqs_key = "num_reqs";
 static char *payload_sz_key = "payload_sz";
 static char *aspen_group_nm = "ASPEN_PARAMS";
-static char aspen_app_key[] = "aspen_app_pathX";
+static char aspen_app_key[] = "aspen_app_path000";
 static char *aspen_mach_key = "aspen_mach_path";
 static char *aspen_socket_key = "socket_choice";
 static char *num_rounds_key = "num_rounds";
@@ -244,4 +244,24 @@ const tw_optdef app_opt [] =
         TWOPT_CHAR("conf", conf_file_name, "name of codes configuration file"),
 	TWOPT_END()
 };
+
+/* Helper function to return a stringified version of an int */
+int int_to_array(int num, char** array){
+    int temp = num;
+    int count = 0;
+    while (temp > 0){
+        temp /= 10;
+        count ++;
+    }
+    if (count == 0) count = 1;
+    *array = calloc(count, sizeof(char));
+    temp = count;
+    printf("temp return should be %d\n", temp);
+    while (count > 0){
+        count --;
+        (*array)[count] = (num % 10) + '0';
+        num /= 10;
+    }
+    return temp;
+}
 #endif

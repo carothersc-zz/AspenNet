@@ -108,27 +108,30 @@ int main(
     configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
     if (g_tw_mynode == 0) 
     {
-        int i = 0;
+        int i, j, temp;
         configuration_get_value_int(&config, misc_param_gp_nm, num_rounds_key, NULL, &num_rounds);
         fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
         // TODO: Make sure that the memory is freed!
         Aspen_App_Path = calloc(num_rounds+1, sizeof(char*));
-        fprintf(stderr,"This should be an address: %x\n", Aspen_App_Path[0]);
-        Aspen_App_Path[num_rounds] = '\0';
         if (num_rounds > 1)
         {
-            for (; i < num_rounds; i++)
+            char **buffer = malloc(sizeof(char*));
+            for (i = 0; i < num_rounds; i++)
             {
-                aspen_app_key[14] = i + '0';
+                temp = int_to_array(i, buffer);
+                for (j = 1; j <= temp; j++)
+                {
+                    aspen_app_key[17 - j] = (*buffer)[temp - j];
+                }
+                free(*buffer);
                 fprintf(stderr, "INFO: Attempting to load aspen_app_key %s\n", aspen_app_key);
-                // TODO: find a better way so that more than 9 rounds can be processed!!
                 Aspen_App_Path[i] = malloc(100 * sizeof(char));
                 configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[i], 100);      
             }
+            free(buffer);
         }
         else 
         {
-            aspen_app_key[14] = '0';
             Aspen_App_Path[0] = calloc(100, sizeof(char)); 
             configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[0], 100);
         }
