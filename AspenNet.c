@@ -149,12 +149,11 @@ int main(
         // TODO: remove hard-coded length of 100!
         for (i = 0; i < num_rounds; i++)
         {
-            fprintf(stderr,"\tAspen app model path loaded: %s\n",\
-                    Aspen_App_Path[i]);
+            fprintf(stderr,"\tAspen app model path loaded: %s\n"\
+                    "\tAspen socket choice loaded: %s\n",\
+                    Aspen_App_Path[i], Aspen_Socket[i]);
         }
-        fprintf(stderr, "INFO: Aspen machine model path loaded: %s\n"\
-                "\tAspen socket choice loaded: %s\n",\
-                Aspen_Mach_Path, Aspen_Socket[0]);
+        fprintf(stderr, "INFO: Aspen machine model path loaded: %s\n", Aspen_Mach_Path);
     }
     
     /* calculate the total number of server lps (this may not work in\
@@ -799,6 +798,7 @@ static void handle_computation_rev_event(
     assert(!lp->gid && !g_tw_mynode);
     fprintf(stderr, "ROLLBACK: Performing reverse aspen computation.\n"\
             "\tCurrent value is: %f\n", totalRuntime);
+    computationRollbacks ++;
     totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
     totalRuntime -= runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
                                 Aspen_Mach_Path, Aspen_Socket[roundsExecuted - computationRollbacks]);
@@ -808,7 +808,6 @@ static void handle_computation_rev_event(
         fprintf(stderr, "\tWARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
         totalRuntime = 0;
     }
-    computationRollbacks ++;
     fprintf(stderr, "\tAfter rollback, runtime value is: %f\n", totalRuntime);
     if (m->incremented_flag)
     {
