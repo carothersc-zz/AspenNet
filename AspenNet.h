@@ -46,7 +46,7 @@ static char *misc_param_gp_nm = "PARAMS";
 static char *aspen_group_nm = "ASPEN_PARAMS";
 /* Number of network requests to be sent by each LP per round */
 static char *num_reqs_key = "num_reqs";
-/* The size of each message's payload (in bytes?...) TODO: Clarify! */
+/* The size of each message's payload (in KB) */
 static char *payload_sz_key = "payload_sz";
 /* Template names for aspen file path keys and socket choices: */
 static char aspen_app_key[] = "aspen_app_path000";

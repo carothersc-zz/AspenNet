@@ -396,12 +396,6 @@ static void handle_kickoff_event(
     m_remote.aspen_svr_event_type = REQ;
     m_remote.src = lp->gid;
     
-    //fprintf(stderr,"INFO: This LP has gid: %lu and local id: %lu. Node id: %lu\n"\
-            "\tThe total number of server LPs is: %lu.\n"\
-            "\tThe offset is: %lu\n"\
-            "\tThe number of PEs is: %lu\n",\
-            lp->gid, lp->id, g_tw_mynode, g_tw_nlp, g_tw_lp_offset, g_tw_npe);
-
     /* record when transfers started on this server */
     ns->start_ts = tw_now(lp);
 
@@ -445,12 +439,6 @@ static void handle_restart_event(
     m_local.src = lp->gid;
     m_remote.aspen_svr_event_type = REQ;
     m_remote.src = lp->gid;
-    
-    //fprintf(stderr,"INFO: This LP has gid: %lu and local id: %lu. Node id: %lu\n"\
-            "\tThe total number of server LPs is: %lu.\n"\
-            "\tThe offset is: %lu\n"\
-            "\tThe number of PEs is: %lu\n",\
-            lp->gid, lp->id, g_tw_mynode, g_tw_nlp, g_tw_lp_offset, g_tw_npe);
 
     /* record when transfers started on this server */
     m->start_ts = ns->start_ts;
@@ -512,6 +500,7 @@ static void handle_ack_event(
 
     if(ns->msg_sent_count < num_reqs)
     {
+        m->incremented_flag = 1;
         /* again, allocate our own msgs so model-net can transmit on our behalf */
         aspen_svr_msg m_local;
         aspen_svr_msg m_remote;
@@ -524,9 +513,7 @@ static void handle_ack_event(
         /* send another request */
 	model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
                 (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
-        ns->msg_sent_count++;
-        m->incremented_flag = 1;
-        
+        ns->msg_sent_count++; 
     }
     else
     {
@@ -579,7 +566,7 @@ static void handle_req_event(
     ns->msg_recvd_count++;
 
     /* send ack back */
-    /* simulated payload of 1 MiB */
+    /* simulated payload of 4 MiB */
     /* also trigger a local event for completion of payload msg */
     /* remote host will get an ack event */
    
@@ -597,8 +584,7 @@ static void handle_data_event(
     /* Make sure that the lp receiving this event is the 0 LP */
     assert(!lp->gid && !g_tw_mynode);
     fprintf(stderr, "INFO: LP %lu received data event. (%u)\n", lp->gid, ns->data_recvd + 1);
-    b->c2 = 0;
-    if (m->start_ts > ns->start_global)
+    if (m->start_ts < ns->start_global)
     {
         b->c0 = 1;
         swap_start(ns, m);
@@ -623,22 +609,19 @@ static void handle_data_event(
         fprintf(stderr, "\tLP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
                 lp->gid);
         tw_event *e; 
-        aspen_svr_msg *m;
+        aspen_svr_msg *msg;
         tw_stime compute_time; 
-
-        // skew each data event slightly to help avoid event ties later on
-        compute_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
+        compute_time = g_tw_lookahead; 
 
         // first create the event (time arg is an offset, not absolute time)
         e = codes_event_new(0, compute_time, lp);
         // after event is created, grab the allocated message and set msg-specific\
          * data
-        m = tw_event_data(e);
-        m->aspen_svr_event_type = ASPENCOMP;
-        m->src = lp->gid;
+        msg = tw_event_data(e);
+        msg->aspen_svr_event_type = ASPENCOMP;
+        msg->src = lp->gid;
         // event is ready to be processed, send it off
         tw_event_send(e);
-        b->c2 = 1;
     }
     return;
 }
@@ -652,10 +635,10 @@ static void handle_computation_event(
 {
     // Non-master LPs should never receive this event, so exit if they do.
     assert(!g_tw_mynode && !lp->gid);
-    m->incremented_flag = 0;
-    fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
     assert(m->src == lp->gid);
+    fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
     /* Proceed with the computation: */
+    m->incremented_flag = 0;
     totalRuntime += ns_to_s(ns->end_global - ns->start_global);
     fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
             The start and end values are: %f ns and %f ns\n",\
@@ -760,11 +743,11 @@ static void handle_ack_rev_event(
     {
         model_net_event_rc(net_id, lp, payload_sz);
         ns->msg_sent_count--;
-        tw_rand_reverse_unif(lp->rng);
     }
     else
     {
         ns->end_ts = m->end_ts;
+        tw_rand_reverse_unif(lp->rng);
     }
     return;
 }
@@ -793,7 +776,6 @@ static void handle_data_rev_event(
     {
         fprintf(stderr, "\tAll data events have been reversed.\n");
     }
-    if (b->c2) tw_rand_reverse_unif(lp->rng);
     return;
 }
 
@@ -821,7 +803,7 @@ static void handle_computation_rev_event(
     if (m->incremented_flag)
     {
         int i = 0;
-        for ( ; i < num_servers; i++)
+        for ( ; i < num_servers * 2; i+=2)
         {
             tw_rand_reverse_unif(lp->rng);
         }
