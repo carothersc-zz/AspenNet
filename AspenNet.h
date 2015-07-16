@@ -24,31 +24,36 @@
 static int socket;     // Global int for the socket to be used (perhaps this should be configure in the conf file?)
 char Aspen_Mach_Path[100];      // Global for path and name of Aspen model
 char **Aspen_App_Path = NULL;        // Global array for paths and names of Aspen application/kernels
-char **Aspen_Socket;         // Global array for names of sockets to be used
+char **Aspen_Socket = NULL;         // Global array for names of sockets to be used
 // TODO: Do something better than having a hard-coded length...
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
 static int num_rounds = 0; /* number of computation-simulation rounds to perform (read from config) */
 
-/* model-net ID, can be either simple-net, dragonfly or torus (more may be
+/* model-net ID, can be either simple-net, dragonfly or torus (more will be
  * added) */
 static int net_id = 0;
 static int num_servers = 0;
 static int offset = 2;
 
-static unsigned int ttl_lps = 0;
-
-/* expected LP group name in configure files for this program */
+/* Expected LP group name in configure files for this program */
 static char *group_name = "ASPEN_SERVERS";
-/* expected parameter group name for rounds of communication */
+/* Expected parameter group name for rounds of communication */
 static char *param_group_nm = "server_pings";
+/* Expected misc parameters group name */
 static char *misc_param_gp_nm = "PARAMS";
-static char *num_reqs_key = "num_reqs";
-static char *payload_sz_key = "payload_sz";
+/* Expected name of conf group for Aspen file path parameters */
 static char *aspen_group_nm = "ASPEN_PARAMS";
+/* Number of network requests to be sent by each LP per round */
+static char *num_reqs_key = "num_reqs";
+/* The size of each message's payload (in bytes?...) TODO: Clarify! */
+static char *payload_sz_key = "payload_sz";
+/* Template names for aspen file path keys and socket choices: */
 static char aspen_app_key[] = "aspen_app_path000";
 static char *aspen_mach_key = "aspen_mach_path";
 static char aspen_socket_key[] = "socket_choice000";
+/* The number of network-computation rounds to be performed in the
+ * simulation (set from config file) */
 static char *num_rounds_key = "num_rounds";
 
 typedef struct svr_msg aspen_svr_msg;
@@ -89,7 +94,6 @@ struct svr_msg
 {
     enum svr_event aspen_svr_event_type;
     tw_lpid src;          /* source of this request or ack */
-
     int incremented_flag; /* helper for reverse computation */
     tw_stime start_ts;    /* storage of start time for data */
     tw_stime end_ts;      /* storage of end time for data */
@@ -245,7 +249,9 @@ const tw_optdef app_opt [] =
 	TWOPT_END()
 };
 
-/* Helper function to return a stringified version of an int */
+/* Helper function to return a stringified version of num.
+ * This returns an int giving the number of digits, as well as
+ * filling a buffer (arg: array) with the stringified number */
 int int_to_array(int num, char** array){
     int temp = num;
     int count = 0;

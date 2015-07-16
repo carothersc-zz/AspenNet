@@ -24,16 +24,25 @@
 
 #include "AspenNet.h"
 
-// Prototypes for extern C functions:
+/* Prototypes for two extern C functions:
+ *  NOTE: in order for the functions (and the whole simulation)
+ *  to function, this file must be linked with AspenNet_AspenUtils.cpp,
+ *  which contains the function definitions. AspenNet_AspenUtils.cpp
+ *  #includes several Aspen source files from which its functionality
+ *  is derived. */
 extern double runtimeCalc(char *a, char *m, char * socket);
 extern int getSockets(char *m, char*** buf);
-tw_stime totalRuntime = 0;  /* Global value to keep track of total runtime */
-unsigned int lastSocket = 0; /*The last socket that was used */
-unsigned int computationRollbacks = 0; /* Global value to specifically keep
-                                        * track of ASPENCOMP rollbacks */
-unsigned int roundsExecuted = 0;         /* Global value to keep track of the # of
-                                          * network-computation rounds performed */
+/* Global value to keep track of total runtime */
+tw_stime totalRuntime = 0;  
+/* Global value to specifically keep track of ASPENCOMP rollbacks */
+unsigned int computationRollbacks = 0; 
+/* Global value to keep track of the # of network-computation rounds performed */
+unsigned int roundsExecuted = 0;  
 
+
+/* Main function:
+ * handles getting configuration options from config file and setup of ROSS/CODES 
+ * simulation environment (including LPs) */
 int main(
     int argc,
     char *argv[])
@@ -42,7 +51,6 @@ int main(
     int rank;
     int num_nets, *net_ids;
 
-    /* TODO: explain why we need this (ROSS has cutoff??) */
     g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
     
     /* ROSS initialization function calls */
@@ -106,9 +114,12 @@ int main(
      * go ahead and read them prior to running */
     configuration_get_value_int(&config, param_group_nm, num_reqs_key, NULL, &num_reqs);
     configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
+    /* Now, if this is the 0th MPI rank, read the Aspen configuration paths and filenames,
+     * as well as the total number of simulation rounds to run. */
     if (g_tw_mynode == 0) 
     {
         int i, j, temp;
+        /* Get the number of rounds: */
         configuration_get_value_int(&config, misc_param_gp_nm, num_rounds_key, NULL, &num_rounds);
         fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
         Aspen_App_Path = calloc(num_rounds+1, sizeof(char*));
@@ -118,7 +129,7 @@ int main(
             char **buffer = malloc(sizeof(char*));
             for (i = 0; i < num_rounds; i++)
             {
-                // Load the app for each round:
+                // Load the app path for each round:
                 temp = int_to_array(i, buffer);
                 for (j = 1; j <= temp; j++)
                 {
@@ -128,7 +139,7 @@ int main(
                 Aspen_App_Path[i] = malloc(100 * sizeof(char));
                 configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[i], 100);      
                 
-                // Load the socket for each round:
+                // Load the socket choice for each round:
                 temp = int_to_array(i, buffer); 
                 for (j = 1; j <= temp; j++)
                 {
@@ -145,6 +156,7 @@ int main(
             Aspen_App_Path[0] = calloc(100, sizeof(char)); 
             configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[0], 100);
         }
+        /* Finally, load the aspen machine path, which should be the same for all rounds. */
         configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100); 
         // TODO: remove hard-coded length of 100!
         for (i = 0; i < num_rounds; i++)
@@ -155,11 +167,7 @@ int main(
         }
         fprintf(stderr, "INFO: Aspen machine model path loaded: %s\n", Aspen_Mach_Path);
     }
-    
-    /* calculate the total number of server lps (this may not work in\
-     * cases with an uneven number of lps total) */
-    ttl_lps = tw_nnodes() * g_tw_npe * g_tw_nlp/2;
- 
+     
     /* begin simulation */ 
     tw_run();
 
@@ -171,18 +179,18 @@ int main(
                "kernel(s) is %f seconds.\n", totalRuntime);   
         fprintf(stderr, "INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
         fprintf(stderr, "INFO: Aspen computation was performed %u times.\n", roundsExecuted);
+        /* Sanity check for optimized scheduler runs: */
         if (roundsExecuted != num_rounds + computationRollbacks)
         {
             fprintf(stderr, "ERROR: Aspen computation was performed an incorrect number of times!\n");
         }
     }
     tw_end();
+    /* Memory cleanup on the 0th MPI rank: */
     if (g_tw_mynode == 0)
     {
-        int i = 1;
-        free(Aspen_App_Path[0]);
-        free(Aspen_Socket[0]);
-        for (; i < num_rounds; i++)
+        int i;
+        for (i = 0; i < num_rounds; i++)
         {
             free(Aspen_App_Path[i]);
             free(Aspen_Socket[i]);
@@ -305,6 +313,7 @@ static void aspen_svr_rev_event(
             handle_restart_rev_event(ns, b, m, lp);
             break;
         default:
+	    printf("\n Invalid reverse message type %d ", m->aspen_svr_event_type);
             assert(0);
             break;
     }
@@ -609,7 +618,7 @@ static void handle_data_event(
     }
     ns->data_recvd ++;
     // When the last one has been received, send a self message for aspen computation
-    if (ns->data_recvd == ttl_lps)
+    if (ns->data_recvd == num_servers)
     {
         fprintf(stderr, "\tLP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
                 lp->gid);
@@ -662,7 +671,7 @@ static void handle_computation_event(
         m->incremented_flag = 1;
         /* There are more rounds to simulate, so send kickoffs to all LPs */
         tw_lpid i = 0;
-        for ( ; i < ttl_lps * 2; i+=2) // TODO: make the increment based on lp settings in config!
+        for ( ; i < num_servers * 2; i+=2) // TODO: make the increment based on lp settings in config!
         {
             tw_event *e; 
             aspen_svr_msg *msg;
@@ -802,7 +811,7 @@ static void handle_computation_rev_event(
     totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
     totalRuntime -= runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
                                 Aspen_Mach_Path, Aspen_Socket[roundsExecuted - computationRollbacks]);
-    ns->data_recvd = ttl_lps; 
+    ns->data_recvd = num_servers; 
     if (totalRuntime < 0)
     {
         fprintf(stderr, "\tWARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
@@ -812,7 +821,7 @@ static void handle_computation_rev_event(
     if (m->incremented_flag)
     {
         int i = 0;
-        for ( ; i < ttl_lps; i++)
+        for ( ; i < num_servers; i++)
         {
             tw_rand_reverse_unif(lp->rng);
         }
