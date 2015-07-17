@@ -51,6 +51,8 @@ int main(
     int rank;
     int num_nets, *net_ids;
 
+    g_tw_lookahead = 0.5;
+
     g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
     
     /* ROSS initialization function calls */
@@ -326,7 +328,7 @@ static void aspen_svr_finalize(
     aspen_svr_state * ns,
     tw_lp * lp)
 {
-    printf("server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", 
+    fprintf(stderr, "server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", 
             (unsigned long long)(lp->gid/2),
             payload_sz*ns->msg_recvd_count,
             ns_to_s(ns->end_ts-ns->start_ts),
