@@ -35,6 +35,7 @@ static int num_rounds = 0; /* number of computation-simulation rounds to perform
 static int net_id = 0;
 static int num_servers = 0;
 static int offset = 2;
+static int ttl_lps = 0;
 
 /* Expected LP group name in configure files for this program */
 static char *group_name = "ASPEN_SERVERS";
@@ -215,8 +216,7 @@ static void handle_computation_rev_event(
 
 /* for this simulation, each server contacts its neighboring server in an id.
  * this function shows how to use the codes_mapping API to calculate IDs when
- * having to contend with multiple LP types and counts. Note that in this simple
- * example codes_mapping is overkill. */
+ * having to contend with multiple LP types and counts. */
 static tw_lpid get_next_server(tw_lpid sender_id);
 
 /* arguments to be handled by ROSS - strings passed in are expected to be
