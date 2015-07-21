@@ -51,7 +51,7 @@ int main(
     int rank;
     int num_nets, *net_ids;
 
-    g_tw_lookahead = 0.5;
+    g_tw_lookahead = 1;
 
     g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
     
@@ -149,6 +149,8 @@ int main(
         {
             Aspen_App_Path[0] = calloc(100, sizeof(char)); 
             configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[0], 100);
+            Aspen_Socket[0] = malloc(100 * sizeof(char));
+            configuration_get_value(&config, aspen_group_nm, aspen_socket_key, NULL, Aspen_Socket[i], 100);
         }
         /* Finally, load the aspen machine path, which should be the same for all rounds. */
         configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100); 
@@ -534,7 +536,6 @@ static void handle_ack_event(
         // event is ready to be processed, send it off
         tw_event_send(e);
     }
-    printf("ack event\n");
     return;
 }
 
@@ -566,7 +567,6 @@ static void handle_req_event(
    
     model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
-    printf("req event\n");
     return;
 }
 
@@ -640,7 +640,7 @@ static void handle_computation_event(
             (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
     totalRuntime += runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
                                 Aspen_Mach_Path, Aspen_Socket[roundsExecuted - computationRollbacks]);
-    fprintf(stderr, "INFO: The total runtime (so far) is %f seconds.\n", totalRuntime);
+    fprintf(stderr, "INFO: The final calculated runtime (up to this round) is %f seconds.\n", totalRuntime);
     roundsExecuted ++;
     ns->data_recvd = 0;
     if (roundsExecuted < num_rounds + computationRollbacks)
@@ -648,8 +648,9 @@ static void handle_computation_event(
         fprintf(stderr, "INFO: sending restart messages to LPs now!\n");
         m->incremented_flag = 1;
         /* There are more rounds to simulate, so send kickoffs to all LPs */
-        tw_lpid i = 0;
-        for ( ; i < num_servers * 2; i+=2) // TODO: make the increment based on lp settings in config!
+        int i = 0;
+        tw_lpid current_lpid = 0;
+        for ( ; i < num_servers; i++) 
         {
             tw_event *e; 
             aspen_svr_msg *msg;
@@ -659,7 +660,7 @@ static void handle_computation_event(
             kickoff_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
 
             /* first create the event (time arg is an offset, not absolute time) */
-            e = codes_event_new(i, kickoff_time, lp);
+            e = codes_event_new(current_lpid, kickoff_time, lp);
             /* after event is created, grab the allocated message and set msg-specific
              * data */ 
             msg = tw_event_data(e);
@@ -667,6 +668,7 @@ static void handle_computation_event(
             msg->src = lp->gid;
             /* event is ready to be processed, send it off */
             tw_event_send(e);
+            current_lpid = get_next_server(current_lpid);
         }
     }
     return;
@@ -798,7 +800,7 @@ static void handle_computation_rev_event(
     if (m->incremented_flag)
     {
         int i = 0;
-        for ( ; i < num_servers * 2; i+=2)
+        for ( ; i < num_servers; i++)
         {
             tw_rand_reverse_unif(lp->rng);
         }
