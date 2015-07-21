@@ -51,7 +51,7 @@ int main(
     int rank;
     int num_nets, *net_ids;
 
-    g_tw_lookahead = 0.5;
+    g_tw_lookahead = 1;
 
     g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
     
@@ -534,7 +534,6 @@ static void handle_ack_event(
         // event is ready to be processed, send it off
         tw_event_send(e);
     }
-    printf("ack event\n");
     return;
 }
 
@@ -566,7 +565,6 @@ static void handle_req_event(
    
     model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
-    printf("req event\n");
     return;
 }
 
