@@ -59,9 +59,9 @@ int main(
     tw_opt_add(app_opt); /* add user-defined args */
     /* initialize ROSS and parse args. NOTE: tw_init calls MPI_Init */
     tw_init(&argc, &argv); 
-    if (!conf_file_name[0]) 
+    if (!aspen_conf_file_name[0]) 
     {
-        fprintf(stderr, "Expected \"--conf\" option, please see --help.\n");
+        fprintf(stderr, "Expected \"--conf\" option with AspenNet configuration file.\n");
         MPI_Finalize();
         return 1;
     }
@@ -69,15 +69,22 @@ int main(
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
   
-    /* loading the config file into the codes-mapping utility, giving us the
-     * parsed config object in return. 
-     * "config" is a global var defined by codes-mapping */
-    if (configuration_load(conf_file_name, MPI_COMM_WORLD, &config)){
-        fprintf(stderr, "Error loading config file %s.\n", conf_file_name);
+    /* loading the aspen config file into the codes-mapping utility, giving us the
+     * parsed aspen_config object in return. */ 
+    if (configuration_load(aspen_conf_file_name, MPI_COMM_WORLD, &aspen_config)){
+        fprintf(stderr, "Error loading AspenNet config file %s.\n", aspen_conf_file_name);
         MPI_Finalize();
         return 1;
     }
-
+    /* Retrieve the name of the network config file, stored in the aspen config file */
+    configuration_get_value(&aspen_config, aspen_group_nm, network_conf_key, NULL, network_conf_file_name, 256);
+    /* "config" is a global var defined by codes-mapping (which is now only used
+     * for network-specific settings) */
+    if (configuration_load(network_conf_file_name, MPI_COMM_WORLD, &config)){
+        fprintf(stderr, "Error loading network config file %s.\n", network_conf_file_name);
+        MPI_Finalize();
+        return 1;
+    }
     /* register model-net LPs with ROSS */
     model_net_register();
 
@@ -114,7 +121,7 @@ int main(
     {
         int i, j, temp;
         /* Get the number of rounds: */
-        configuration_get_value_int(&config, misc_param_gp_nm, num_rounds_key, NULL, &num_rounds);
+        configuration_get_value_int(&aspen_config, aspen_group_nm, num_rounds_key, NULL, &num_rounds);
         fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
         Aspen_App_Path = calloc(num_rounds+1, sizeof(char*));
         Aspen_Socket = calloc(num_rounds+1, sizeof(char*));
@@ -131,7 +138,7 @@ int main(
                 }
                 free(*buffer);
                 Aspen_App_Path[i] = malloc(100 * sizeof(char));
-                configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[i], 100);      
+                configuration_get_value(&aspen_config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[i], 100);      
                 
                 // Load the socket choice for each round:
                 temp = int_to_array(i, buffer); 
@@ -141,19 +148,19 @@ int main(
                 }
                 free(*buffer); 
                 Aspen_Socket[i] = malloc(100 * sizeof(char*));
-                configuration_get_value(&config, aspen_group_nm, aspen_socket_key, NULL, Aspen_Socket[i], 100);
+                configuration_get_value(&aspen_config, aspen_group_nm, aspen_socket_key, NULL, Aspen_Socket[i], 100);
             }
             free(buffer);
         }
         else 
         {
             Aspen_App_Path[0] = calloc(100, sizeof(char)); 
-            configuration_get_value(&config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[0], 100);
+            configuration_get_value(&aspen_config, aspen_group_nm, aspen_app_key, NULL, Aspen_App_Path[0], 100);
             Aspen_Socket[0] = malloc(100 * sizeof(char));
-            configuration_get_value(&config, aspen_group_nm, aspen_socket_key, NULL, Aspen_Socket[i], 100);
+            configuration_get_value(&aspen_config, aspen_group_nm, aspen_socket_key, NULL, Aspen_Socket[i], 100);
         }
         /* Finally, load the aspen machine path, which should be the same for all rounds. */
-        configuration_get_value(&config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100); 
+        configuration_get_value(&aspen_config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100); 
         // TODO: remove hard-coded length of 100!
         for (i = 0; i < num_rounds; i++)
         {
