@@ -18,8 +18,8 @@
 #include <ross.h>
 #include <codes/configuration.h>
 
-/* Two global variables for the aspen config file and ross/network config file handles */
-ConfigHandle network_config;
+/* Global variables for the aspen config file (ROSS/network config handle is
+ * a global preallocated by configuration.c */
 ConfigHandle aspen_config;
 
 // NOTE: the aspen config file should contain the paths to the aspen kernel model(s)
@@ -42,6 +42,8 @@ static int num_servers = 0;
 static int offset = 2;
 static int ttl_lps = 0;
 
+/* Expected key for ROSS/network config file */
+static char *network_conf_key = "network_conf_file";
 /* Expected LP group name in configure files for this program */
 static char *group_name = "ASPEN_SERVERS";
 /* Expected parameter group name for rounds of communication */

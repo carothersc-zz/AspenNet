@@ -39,7 +39,6 @@ unsigned int computationRollbacks = 0;
 /* Global value to keep track of the # of network-computation rounds performed */
 unsigned int roundsExecuted = 0;  
 
-
 /* Main function:
  * handles getting configuration options from config file and setup of ROSS/CODES 
  * simulation environment (including LPs) */
@@ -113,8 +112,8 @@ int main(
     /* for this example, we read from a separate configuration group for
      * server message parameters. Since they are constant for all LPs,
      * go ahead and read them prior to running */
-    configuration_get_value_int(&config, param_group_nm, num_reqs_key, NULL, &num_reqs);
-    configuration_get_value_int(&config, param_group_nm, payload_sz_key, NULL, &payload_sz);
+    configuration_get_value_int(&aspen_config, param_group_nm, num_reqs_key, NULL, &num_reqs);
+    configuration_get_value_int(&aspen_config, param_group_nm, payload_sz_key, NULL, &payload_sz);
     /* Now, if this is the 0th MPI rank, read the Aspen configuration paths and filenames,
      * as well as the total number of simulation rounds to run. */
     if (g_tw_mynode == 0) 
