@@ -51,7 +51,7 @@ int main(
     int rank;
     int num_nets, *net_ids;
 
-    g_tw_lookahead = 1;
+    g_tw_lookahead = 0.5;
 
     g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
     
