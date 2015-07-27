@@ -16,8 +16,13 @@
 #include <string.h>
 #include <assert.h>
 #include <ross.h>
+#include <codes/configuration.h>
 
-// NOTE: the config file should contain the paths to the aspen kernel model(s)
+/* Two global variables for the aspen config file and ross/network config file handles */
+ConfigHandle network_config;
+ConfigHandle aspen_config;
+
+// NOTE: the aspen config file should contain the paths to the aspen kernel model(s)
 // and hardware model, as well as the socket on which the kernel model should be
 // evaluated.
 
@@ -221,13 +226,16 @@ static tw_lpid get_next_server(tw_lpid sender_id);
 
 /* arguments to be handled by ROSS - strings passed in are expected to be
  * pre-allocated */
-static char conf_file_name[256] = {0};
-/* this struct contains default parameters used by ROSS, as well as
- * user-specific arguments to be handled by the ROSS config sys. Pass it in
- * prior to calling tw_init */
+static char aspen_conf_file_name[256] = {0};
+/* this struct contains user-specific arguments to be handled 
+ * by the ROSS config sys. Pass it in prior to calling tw_init */
 
 /* two value-swapper functions for processing the start and end 
  * timestamps received in data events */
+
+static char network_conf_file_name[256] = {0};
+/* This struct contains the ROSS/network configuration settings. */
+
 inline void swap_start(aspen_svr_state * ns, aspen_svr_msg * m)
 {
     tw_stime temp = ns->start_global;
@@ -245,7 +253,7 @@ inline void swap_end(aspen_svr_state * ns, aspen_svr_msg * m)
 const tw_optdef app_opt [] =
 {
 	TWOPT_GROUP("Model net test case" ),
-        TWOPT_CHAR("conf", conf_file_name, "name of codes configuration file"),
+        TWOPT_CHAR("conf", aspen_conf_file_name, "name of AspenNet configuration file"),
 	TWOPT_END()
 };
 
