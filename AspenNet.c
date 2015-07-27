@@ -374,7 +374,6 @@ static void handle_kickoff_event(
     tw_lp * lp)
 {
     int dest_id;
-    int use_brute_force_map = 0;
     /* normally, when using ROSS, events are allocated as a result of the event
      * creation process. However, since we are now asking model-net to
      * communicate with an entity on our behalf, we need to generate both the
@@ -392,17 +391,7 @@ static void handle_kickoff_event(
     /* record when transfers started on this server */
     ns->start_ts = tw_now(lp);
 
-    /* each server sends a request to the next highest server 
-     * In this simulation, LP determination is simple: LPs are assigned
-     * round robin as in serv_1, net_1, serv_2, net_2, etc. 
-     * However, that may not always be the case, so we also show a more
-     * complicated way to map through codes_mapping */
-    if (use_brute_force_map)
-        dest_id = (lp->gid + offset)%(num_servers*2);
-    else
-    {
-        dest_id = get_next_server(lp->gid);
-    }
+    dest_id = get_next_server(lp->gid);
 
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
      * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null) */
@@ -418,7 +407,6 @@ static void handle_restart_event(
     tw_lp * lp)
 {
     int dest_id;
-    int use_brute_force_map = 0;
     /* normally, when using ROSS, events are allocated as a result of the event
      * creation process. However, since we are now asking model-net to
      * communicate with an entity on our behalf, we need to generate both the
@@ -440,17 +428,7 @@ static void handle_restart_event(
     ns->msg_sent_count = 1;
     ns->msg_recvd_count = 0;
 
-    /* each server sends a request to the next highest server 
-     * In this simulation, LP determination is simple: LPs are assigned
-     * round robin as in serv_1, net_1, serv_2, net_2, etc. 
-     * However, that may not always be the case, so we also show a more
-     * complicated way to map through codes_mapping */
-    if (use_brute_force_map)
-        dest_id = (lp->gid + offset)%(num_servers*2);
-    else
-    {
-        dest_id = get_next_server(lp->gid);
-    }
+    dest_id = get_next_server(lp->gid);
 
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
      * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null) */
@@ -485,12 +463,8 @@ static void handle_ack_event(
      * model-net "hides" the NIC LP from us so we only see the original
      * destination server */
 
-    /* safety check that this request got to the right server, both with our
-     * brute-force lp calculation and our more generic codes-mapping 
-     * calculation */
-    // TODO: Update this safety check
-    //assert(//m->src == (lp->gid + offset)%(num_servers*2) &&
-           //m->src == get_next_server(lp->gid));
+    /* safety check that this request got to the right server: */
+    assert(m->src == get_next_server(lp->gid));
 
     if(ns->msg_sent_count < num_reqs)
     {
@@ -555,9 +529,7 @@ static void handle_req_event(
     m_remote.src = lp->gid;
 
     /* safety check that this request got to the right server */
-    // TODO: Update this safety check   
-    //assert(//lp->gid == (m->src + offset)%(num_servers*2) &&
-         //lp->gid == get_next_server(m->src));
+    assert(lp->gid == get_next_server(m->src));
     ns->msg_recvd_count++;
 
     /* send ack back */
@@ -628,9 +600,8 @@ static void handle_computation_event(
     aspen_svr_msg * m,
     tw_lp * lp)
 {
-    // Non-master LPs should never receive this event, so exit if they do.
-    assert(!g_tw_mynode && !lp->gid);
-    assert(m->src == lp->gid);
+    // Non-master LPs should never receive or send this event, so exit if they do.
+    assert(!g_tw_mynode && !lp->gid && m->src == lp->gid);
     fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
     /* Proceed with the computation: */
     m->incremented_flag = 0;
