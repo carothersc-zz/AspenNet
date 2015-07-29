@@ -34,6 +34,7 @@ char **Aspen_Socket = NULL;         // Global array for names of sockets to be u
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
 static int num_rounds = 0; /* number of computation-simulation rounds to perform (read from config) */
+static int debug_output = 0; /* flag for debug output. (read from config) */
 
 /* model-net ID, can be either simple-net, dragonfly or torus (more will be
  * added) */

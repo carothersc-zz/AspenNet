@@ -84,6 +84,9 @@ int main(
         MPI_Finalize();
         return 1;
     }
+    /* retreive debug_output flag from conf file */
+    configuration_get_value_int(&aspen_config, aspen_group_nm, "debug_output", NULL, &debug_output);
+    if (debug_output) printf("\n*****DEBUG: WILL PRINT OUTPUT*****\n");
     /* register model-net LPs with ROSS */
     model_net_register();
 
@@ -121,9 +124,11 @@ int main(
         int i, j, temp;
         /* Get the number of rounds: */
         configuration_get_value_int(&aspen_config, aspen_group_nm, num_rounds_key, NULL, &num_rounds);
-        fprintf(stderr, "INFO: Will execute %d network-computation rounds.\n", num_rounds);
+        if (debug_output) printf("INFO: Will execute %d network-computation rounds.\n", num_rounds);
+
         Aspen_App_Path = calloc(num_rounds+1, sizeof(char*));
         Aspen_Socket = calloc(num_rounds+1, sizeof(char*));
+
         if (num_rounds > 1)
         {
             char **buffer = malloc(sizeof(char*));
@@ -163,11 +168,11 @@ int main(
         // TODO: remove hard-coded length of 100!
         for (i = 0; i < num_rounds; i++)
         {
-            fprintf(stderr,"\tAspen app model path loaded: %s\n"\
-                    "\tAspen socket choice loaded: %s\n",\
-                    Aspen_App_Path[i], Aspen_Socket[i]);
+            if (debug_output) printf("\tAspen app model path loaded: %s\n"\
+                                    "\tAspen socket choice loaded: %s\n",\
+                                    Aspen_App_Path[i], Aspen_Socket[i]);
         }
-        fprintf(stderr, "INFO: Aspen machine model path loaded: %s\n", Aspen_Mach_Path);
+        if (debug_output) printf("INFO: Aspen machine model path loaded: %s\n", Aspen_Mach_Path);
     }
      
     /* begin simulation */ 
@@ -177,10 +182,13 @@ int main(
     model_net_report_stats(net_id);
     if (g_tw_mynode == 0)
     {
-        printf("FINAL REPORT: The final runtime for the application "\
+        printf("\nFINAL REPORT: The final runtime for the application "\
                "kernel(s) is %f seconds.\n", totalRuntime);   
-        fprintf(stderr, "INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
-        fprintf(stderr, "INFO: Aspen computation was performed %u times.\n", roundsExecuted);
+        if (debug_output) 
+        {
+            printf("INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
+            printf("INFO: Aspen computation was performed %u times.\n", roundsExecuted);
+        }
         /* Sanity check for optimized scheduler runs: */
         if (roundsExecuted != num_rounds + computationRollbacks)
         {
@@ -277,7 +285,7 @@ static void aspen_svr_event(
             handle_restart_event(ns, b, m, lp);
             break;
         default:
-	    printf("\n Invalid message type %d ", m->aspen_svr_event_type);
+	    fprintf(stderr, "\n Invalid message type %d ", m->aspen_svr_event_type);
             assert(0);
         break;
     }
@@ -315,7 +323,7 @@ static void aspen_svr_rev_event(
             handle_restart_rev_event(ns, b, m, lp);
             break;
         default:
-	    printf("\n Invalid reverse message type %d ", m->aspen_svr_event_type);
+	    fprintf(stderr, "\n Invalid reverse message type %d ", m->aspen_svr_event_type);
             assert(0);
             break;
     }
@@ -328,7 +336,7 @@ static void aspen_svr_finalize(
     aspen_svr_state * ns,
     tw_lp * lp)
 {
-    fprintf(stderr, "server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", 
+    if (debug_output) fprintf(stderr, "server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", 
             (unsigned long long)(lp->gid/2),
             payload_sz*ns->msg_recvd_count,
             ns_to_s(ns->end_ts-ns->start_ts),
@@ -556,7 +564,7 @@ static void handle_data_event(
 {
     /* Make sure that the lp receiving this event is the 0 LP */
     assert(!lp->gid && !g_tw_mynode);
-    fprintf(stderr, "INFO: LP %lu received data event. (%u)\n", lp->gid, ns->data_recvd + 1);
+    if (debug_output) printf("INFO: LP %lu received data event. (%u)\n", lp->gid, ns->data_recvd + 1);
     if (m->start_ts < ns->start_global)
     {
         b->c0 = 1;
@@ -579,7 +587,7 @@ static void handle_data_event(
     // When the last one has been received, send a self message for aspen computation
     if (ns->data_recvd == num_servers)
     {
-        fprintf(stderr, "\tLP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
+        if (debug_output) printf("\tLP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
                 lp->gid);
         tw_event *e; 
         aspen_svr_msg *msg;
@@ -608,21 +616,26 @@ static void handle_computation_event(
 {
     // Non-master LPs should never receive or send this event, so exit if they do.
     assert(!g_tw_mynode && !lp->gid && m->src == lp->gid);
-    fprintf(stderr,"INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
+    if (debug_output) printf("INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
     /* Proceed with the computation: */
     m->incremented_flag = 0;
     totalRuntime += ns_to_s(ns->end_global - ns->start_global);
-    fprintf(stderr, "INFO: The network time elapsed is: %f ns\n\
+
+    if (debug_output) printf("INFO: The network time elapsed is: %f ns\n\
             The start and end values are: %f ns and %f ns\n",\
             (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
+
     totalRuntime += runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
                                 Aspen_Mach_Path, Aspen_Socket[roundsExecuted - computationRollbacks]);
-    fprintf(stderr, "INFO: The final calculated runtime (up to this round) is %f seconds.\n", totalRuntime);
+
+    if (debug_output) printf("INFO: The final calculated runtime (up to this round) is %f seconds.\n",\
+                            totalRuntime);
+    
     roundsExecuted ++;
     ns->data_recvd = 0;
     if (roundsExecuted < num_rounds + computationRollbacks)
     {
-        fprintf(stderr, "INFO: sending restart messages to LPs now!\n");
+        if (debug_output) printf("INFO: sending restart messages to LPs now!\n");
         m->incremented_flag = 1;
         /* There are more rounds to simulate, so send kickoffs to all LPs */
         int i = 0;
@@ -736,7 +749,7 @@ static void handle_data_rev_event(
     /* There's really not much to do here...just roll back to the \
      * previous start and end times and decrement the data_recvd counter. */
     assert(!lp->gid && !g_tw_mynode);
-    fprintf(stderr, "ROLLBACK: reversing data event. (%u)\n", ns->data_recvd - 1);
+    if (debug_output) printf("ROLLBACK: reversing data event. (%u)\n", ns->data_recvd - 1);
     if (b->c0)
     {
         swap_start(ns, m);
@@ -748,7 +761,7 @@ static void handle_data_rev_event(
     ns->data_recvd --;
     if (ns->data_recvd == 0)
     {
-        fprintf(stderr, "\tAll data events have been reversed.\n");
+        if (debug_output) printf("\tAll data events have been reversed.\n");
     }
     return;
 }
@@ -761,8 +774,10 @@ static void handle_computation_rev_event(
     tw_lp * lp)
 {
     assert(!lp->gid && !g_tw_mynode);
-    fprintf(stderr, "ROLLBACK: Performing reverse aspen computation.\n"\
+
+    if (debug_output) printf("ROLLBACK: Performing reverse aspen computation.\n"\
             "\tCurrent value is: %f\n", totalRuntime);
+
     computationRollbacks ++;
     totalRuntime -= ns_to_s(ns->end_global - ns->start_global);
     totalRuntime -= runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
@@ -770,10 +785,10 @@ static void handle_computation_rev_event(
     ns->data_recvd = num_servers; 
     if (totalRuntime < 0)
     {
-        fprintf(stderr, "\tWARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
+        if (debug_output) printf("\tWARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
         totalRuntime = 0;
     }
-    fprintf(stderr, "\tAfter rollback, runtime value is: %f\n", totalRuntime);
+    if (debug_output) printf("\tAfter rollback, runtime value is: %f\n", totalRuntime);
     if (m->incremented_flag)
     {
         int i = 0;
