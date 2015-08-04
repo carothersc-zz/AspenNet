@@ -530,9 +530,6 @@ static void handle_ack_event(
      * model-net "hides" the NIC LP from us so we only see the original
      * destination server */
 
-    /* safety check that this request got to the right server: */
-    assert(m->src == get_next_server(lp));
-
     if(ns->msg_sent_count < num_reqs)
     {
         m->incremented_flag = 1;
@@ -762,7 +759,15 @@ static void handle_kickoff_rev_event(
 {
     ns->msg_sent_count--;
     model_net_event_rc(net_id, lp, payload_sz);
-
+    switch (traffic_pattern_number){
+        case NEXTNEIGHBOR:
+            break;
+        case RANDOM:
+            tw_rand_reverse_unif(lp->rng);
+            break;
+        default:
+            break;
+    }
     return;
 }
 
@@ -777,6 +782,15 @@ static void handle_restart_rev_event(
     ns->msg_sent_count = num_reqs;
     ns->msg_recvd_count = num_reqs;
     model_net_event_rc(net_id, lp, payload_sz);
+    switch (traffic_pattern_number){
+        case NEXTNEIGHBOR:
+            break;
+        case RANDOM:
+            tw_rand_reverse_unif(lp->rng);
+            break;
+        default:
+            break;
+    }
 }
 
 
