@@ -86,7 +86,7 @@ int main(
     }
     /* retreive debug_output flag from conf file */
     configuration_get_value_int(&aspen_config, aspen_group_nm, "debug_output", NULL, &debug_output);
-    if (debug_output) printf("\n*****DEBUG: WILL PRINT OUTPUT*****\n");
+    if (debug_output && !g_tw_mynode) printf("\n*****DEBUG: WILL PRINT OUTPUT*****\n");
     /* register model-net LPs with ROSS */
     model_net_register();
 
@@ -106,7 +106,7 @@ int main(
     assert(num_nets==1);
     net_id = *net_ids;
     free(net_ids);
-    
+
     /* calculate the number of servers in this simulation, and total LPs
      * ignoring annotations */
     num_servers = codes_mapping_get_lp_count(group_name, 0, "server", NULL, 1);
@@ -336,13 +336,13 @@ static void aspen_svr_finalize(
     aspen_svr_state * ns,
     tw_lp * lp)
 {
-    if (debug_output) fprintf(stderr, "server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", 
-            (unsigned long long)(lp->gid/2),
-            payload_sz*ns->msg_recvd_count,
-            ns_to_s(ns->end_ts-ns->start_ts),
-            ((double)(payload_sz*num_reqs)/(double)(1024*1024)/ns_to_s(ns->end_ts-ns->start_ts)),
-            ns->msg_sent_count,
-            ns->msg_recvd_count,
+    if (debug_output) fprintf(stderr, "server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", \
+            (unsigned long long)(lp->gid/2),\
+            payload_sz*ns->msg_recvd_count,\
+            ns_to_s(ns->end_ts-ns->start_ts),\
+            ((double)(payload_sz*num_reqs)/(double)(1024*1024)/ns_to_s(ns->end_ts-ns->start_ts)),\
+            ns->msg_sent_count,\
+            ns->msg_recvd_count,\
             ns->local_recvd_count);
     return;
 }
@@ -366,17 +366,19 @@ tw_lpid get_next_server(tw_lpid sender_id)
     /* first, get callers LP and group info from codes-mapping. Caching this 
      * info in the LP struct isn't a bad idea for preventing a huge number of
      * lookups */
+    // TODO: add different traffic pattern options here!
     char grp_name[MAX_NAME_LENGTH], lp_type_name[MAX_NAME_LENGTH],
          annotation[MAX_NAME_LENGTH];
     int  lp_type_id, grp_id, grp_rep_id, offset_num, num_reps;
-    int dest_rep_id;
+    int  dest_rel_id;
+    /* Grab necessary LP information about the sender: */
     codes_mapping_get_lp_info(sender_id, grp_name, &grp_id, lp_type_name,
             &lp_type_id, annotation, &grp_rep_id, &offset_num);
-    num_reps = codes_mapping_get_group_reps(grp_name);
-    dest_rep_id = (grp_rep_id + 1) % num_reps;
-    /* finally, get the server */
-    codes_mapping_get_lp_id(grp_name, lp_type_name, NULL, 1, dest_rep_id,
-            offset_num, &rtn_id);
+    /* Obtain the original server's relative id, increment by one, and convert back to lpid.
+     * Also use modulo to avoid going out-of-bounds on the last relative id */
+    dest_rel_id = (codes_mapping_get_lp_relative_id(sender_id, 0, 0) + 1) % num_servers;
+    rtn_id = codes_mapping_get_lpid_from_relative(dest_rel_id, grp_name, lp_type_name, NULL, 0);
+    /* Return the nearest neighbor lpid */ 
     return rtn_id;
 }
 
@@ -408,8 +410,9 @@ static void handle_kickoff_event(
     dest_id = get_next_server(lp->gid);
 
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
-     * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null) */
-    model_net_event(net_id, "test", dest_id, payload_sz, 0.0, sizeof(aspen_svr_msg),
+     * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null)     */
+    // TODO: see if the offset (0.000001) can be 0 or not.
+    model_net_event(net_id, "test", dest_id, payload_sz, 0.000001, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     ns->msg_sent_count++;
 }
@@ -445,8 +448,9 @@ static void handle_restart_event(
     dest_id = get_next_server(lp->gid);
 
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
-     * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null) */
-    model_net_event(net_id, "test", dest_id, payload_sz, 0.0, sizeof(aspen_svr_msg),
+     * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null)     */
+     // TODO: see if the offset (0.000001) can be 0 or not.
+    model_net_event(net_id, "test", dest_id, payload_sz, 0.000001, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
 }
 
@@ -493,7 +497,8 @@ static void handle_ack_event(
         m_remote.src = lp->gid;
 
         /* send another request */
-	model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
+	 // TODO: see if the offset (0.000001) can be 0 or not.
+        model_net_event(net_id, "test", m->src, payload_sz, 0.000001, sizeof(aspen_svr_msg),
                 (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
         ns->msg_sent_count++; 
     }
@@ -550,8 +555,8 @@ static void handle_req_event(
     /* simulated payload of 4 MiB */
     /* also trigger a local event for completion of payload msg */
     /* remote host will get an ack event */
-   
-    model_net_event(net_id, "test", m->src, payload_sz, 0.0, sizeof(aspen_svr_msg),
+    // TODO: see if the offset (0.000001) can be 0 or not.
+    model_net_event(net_id, "test", m->src, payload_sz, 0.000001, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     return;
 }
@@ -616,7 +621,8 @@ static void handle_computation_event(
 {
     // Non-master LPs should never receive or send this event, so exit if they do.
     assert(!g_tw_mynode && !lp->gid && m->src == lp->gid);
-    if (debug_output) printf("INFO: Master LP %lu is now performing Aspen Computation\n",lp->gid);
+    if (debug_output) printf("INFO: Master LP %lu is now performing Aspen Computation %d\n",\
+                            lp->gid, roundsExecuted-computationRollbacks);
     /* Proceed with the computation: */
     m->incremented_flag = 0;
     totalRuntime += ns_to_s(ns->end_global - ns->start_global);
@@ -700,6 +706,7 @@ static void handle_kickoff_rev_event(
     tw_lp * lp)
 {
     ns->msg_sent_count--;
+    // TODO: Since this event was sourced by a standard ROSS event, why is the codes_mapping_rc call here?
     model_net_event_rc(net_id, lp, payload_sz);
 
     return;
@@ -715,6 +722,7 @@ static void handle_restart_rev_event(
     ns->start_ts = m->start_ts;
     ns->msg_sent_count = num_reqs;
     ns->msg_recvd_count = num_reqs;
+    // TODO: Same question as in kickoff above...
     model_net_event_rc(net_id, lp, payload_sz);
 }
 
