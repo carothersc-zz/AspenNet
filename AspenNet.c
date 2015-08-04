@@ -119,12 +119,12 @@ int main(
     configuration_get_value_int(&aspen_config, param_group_nm, payload_sz_key, NULL, &payload_sz);
     /* Now, if this is the 0th MPI rank, read the Aspen configuration paths and filenames,
      * as well as the total number of simulation rounds to run. */
+    configuration_get_value(&aspen_config, param_group_nm, traffic_type_key, NULL, &network_traffic_type, 100); 
     if (g_tw_mynode == 0) 
     {
         int i, j, temp;
         /* Get the number of rounds: */
         configuration_get_value_int(&aspen_config, aspen_group_nm, num_rounds_key, NULL, &num_rounds);
-        if (debug_output) printf("INFO: Will execute %d network-computation rounds.\n", num_rounds);
 
         Aspen_App_Path = calloc(num_rounds+1, sizeof(char*));
         Aspen_Socket = calloc(num_rounds+1, sizeof(char*));
@@ -166,26 +166,61 @@ int main(
         /* Finally, load the aspen machine path, which should be the same for all rounds. */
         configuration_get_value(&aspen_config, aspen_group_nm, aspen_mach_key, NULL, &Aspen_Mach_Path, 100); 
         // TODO: remove hard-coded length of 100!
-        for (i = 0; i < num_rounds; i++)
+        if (debug_output) 
         {
-            if (debug_output) printf("\tAspen app model path loaded: %s\n"\
-                                    "\tAspen socket choice loaded: %s\n",\
-                                    Aspen_App_Path[i], Aspen_Socket[i]);
+            if (network_traffic_type)
+            {
+                printf("INFO: Loaded network traffic type %s.\n", network_traffic_type);
+            } else {
+                fprintf(stderr, "WARNING: No network traffic pattern loaded from conf file!\n"\
+                       "Defaulting to nearest-neighbor.\n");
+                network_traffic_type = "nearest-neighbor";
+            }
+            printf("INFO: Will execute %d network-computation rounds.\n", num_rounds);
+            for (i = 0; i < num_rounds; i++)
+            {
+                 printf("\tAspen app model path loaded: %s\n"\
+                                        "\tAspen socket choice loaded: %s\n",\
+                                        Aspen_App_Path[i], Aspen_Socket[i]);
+            }
+            printf("INFO: Aspen machine model path loaded: %s\n", Aspen_Mach_Path);
         }
-        if (debug_output) printf("INFO: Aspen machine model path loaded: %s\n", Aspen_Mach_Path);
+    }
+
+    /* Set traffic pattern number (global): */
+    if (network_traffic_type != NULL)
+    {
+        if (!strcmp(network_traffic_type, "nearest-neighbor"))
+        {
+            traffic_pattern_number = 0;
+        }
+        else if (!strcmp(network_traffic_type, "random"))
+        {
+            traffic_pattern_number = 1;
+        }
+        else
+        {
+            traffic_pattern_number = 0;
+            fprintf(stderr, "WARNING: Invalid traffic pattern entered! Defaulting to nearest-neighbor.\n");
+        }
+    }
+    else
+    {
+        traffic_pattern_number = 0;
+        fprintf(stderr, "WARNING: Invalid traffic pattern entered! Defaulting to nearest-neighbor.\n");
     }
      
     /* begin simulation */ 
     tw_run();
 
-    /* model-net has the capability of outputting network transmission stats */
-    model_net_report_stats(net_id);
     if (g_tw_mynode == 0)
     {
         printf("\nFINAL REPORT: The final runtime for the application "\
                "kernel(s) is %f seconds.\n", totalRuntime);   
         if (debug_output) 
         {
+            /* model-net has the capability of outputting network transmission stats */
+            model_net_report_stats(net_id);
             printf("INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
             printf("INFO: Aspen computation was performed %u times.\n", roundsExecuted);
         }
@@ -360,23 +395,37 @@ static tw_stime s_to_ns(tw_stime ns)
 }
 
 /* see declaration for more general info */
-tw_lpid get_next_server(tw_lpid sender_id)
+tw_lpid get_next_server(tw_lp *lp)
 {
     tw_lpid rtn_id;
     /* first, get callers LP and group info from codes-mapping. Caching this 
      * info in the LP struct isn't a bad idea for preventing a huge number of
      * lookups */
-    // TODO: add different traffic pattern options here!
     char grp_name[MAX_NAME_LENGTH], lp_type_name[MAX_NAME_LENGTH],
          annotation[MAX_NAME_LENGTH];
     int  lp_type_id, grp_id, grp_rep_id, offset_num, num_reps;
     int  dest_rel_id;
     /* Grab necessary LP information about the sender: */
-    codes_mapping_get_lp_info(sender_id, grp_name, &grp_id, lp_type_name,
+    codes_mapping_get_lp_info(lp->gid, grp_name, &grp_id, lp_type_name,
             &lp_type_id, annotation, &grp_rep_id, &offset_num);
     /* Obtain the original server's relative id, increment by one, and convert back to lpid.
      * Also use modulo to avoid going out-of-bounds on the last relative id */
-    dest_rel_id = (codes_mapping_get_lp_relative_id(sender_id, 0, 0) + 1) % num_servers;
+    switch (traffic_pattern_number){
+        case NEXTNEIGHBOR:
+            dest_rel_id = (codes_mapping_get_lp_relative_id(lp->gid, 0, 0) + 1) % num_servers;
+            break;
+        case RANDOM:
+            dest_rel_id = tw_rand_integer(lp->rng, 0, num_servers - 1);
+            if (dest_rel_id >= (codes_mapping_get_lp_relative_id(lp->gid, 0, 0)))
+            {
+                dest_rel_id ++;
+            }
+            assert(dest_rel_id < num_servers);
+            break;
+        default:
+            fprintf(stderr, "ERROR: Invalid traffic pattern slipped through the shields, captain!\n");
+            assert(0);
+    }
     rtn_id = codes_mapping_get_lpid_from_relative(dest_rel_id, grp_name, lp_type_name, NULL, 0);
     /* Return the nearest neighbor lpid */ 
     return rtn_id;
@@ -407,7 +456,7 @@ static void handle_kickoff_event(
     /* record when transfers started on this server */
     ns->start_ts = tw_now(lp);
 
-    dest_id = get_next_server(lp->gid);
+    dest_id = get_next_server(lp);
 
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
      * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null)     */
@@ -445,7 +494,7 @@ static void handle_restart_event(
     ns->msg_sent_count = 1;
     ns->msg_recvd_count = 0;
 
-    dest_id = get_next_server(lp->gid);
+    dest_id = get_next_server(lp);
 
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
      * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null)     */
@@ -482,7 +531,7 @@ static void handle_ack_event(
      * destination server */
 
     /* safety check that this request got to the right server: */
-    assert(m->src == get_next_server(lp->gid));
+    assert(m->src == get_next_server(lp));
 
     if(ns->msg_sent_count < num_reqs)
     {
@@ -547,8 +596,6 @@ static void handle_req_event(
     m_remote.aspen_svr_event_type = ACK;
     m_remote.src = lp->gid;
 
-    /* safety check that this request got to the right server */
-    assert(lp->gid == get_next_server(m->src));
     ns->msg_recvd_count++;
 
     /* send ack back */
@@ -643,20 +690,28 @@ static void handle_computation_event(
     {
         if (debug_output) printf("INFO: sending restart messages to LPs now!\n");
         m->incremented_flag = 1;
-        /* There are more rounds to simulate, so send kickoffs to all LPs */
-        int i = 0;
-        tw_lpid current_lpid = 0;
-        for ( ; i < num_servers; i++) 
+        /* There are more rounds to simulate, so send kickoffs to all LPs
+         * Note that current_lpid is a relative lp id */
+        tw_lpid global_id;
+        /* Grab necessary LP information about the sender: */
+        char grp_name[MAX_NAME_LENGTH], lp_type_name[MAX_NAME_LENGTH],
+             annotation[MAX_NAME_LENGTH];
+        int  lp_type_id, grp_id, grp_rep_id, offset_num;
+        codes_mapping_get_lp_info(lp->gid, grp_name, &grp_id, lp_type_name,
+                &lp_type_id, annotation, &grp_rep_id, &offset_num);
+        /* Now send all the restarts: */
+        tw_lpid relative_lpid = 0;
+        for (; relative_lpid < num_servers; relative_lpid++) 
         {
             tw_event *e; 
             aspen_svr_msg *msg;
             tw_stime kickoff_time;
-            
             /* skew each kickoff event slightly to help avoid event ties later on */
             kickoff_time = g_tw_lookahead + tw_rand_unif(lp->rng); 
-
-            /* first create the event (time arg is an offset, not absolute time) */
-            e = codes_event_new(current_lpid, kickoff_time, lp);
+            /* Convert the relative id to global: */
+            global_id = codes_mapping_get_lpid_from_relative(relative_lpid, grp_name, lp_type_name, NULL, 0);
+            /* create the event (time arg is an offset, not absolute time) */
+            e = codes_event_new(global_id, kickoff_time, lp);
             /* after event is created, grab the allocated message and set msg-specific
              * data */ 
             msg = tw_event_data(e);
@@ -664,7 +719,7 @@ static void handle_computation_event(
             msg->src = lp->gid;
             /* event is ready to be processed, send it off */
             tw_event_send(e);
-            current_lpid = get_next_server(current_lpid);
+            if (debug_output) printf("INFO: Sent restart to lp %lu.\n", global_id);
         }
     }
     return;
@@ -706,7 +761,6 @@ static void handle_kickoff_rev_event(
     tw_lp * lp)
 {
     ns->msg_sent_count--;
-    // TODO: Since this event was sourced by a standard ROSS event, why is the codes_mapping_rc call here?
     model_net_event_rc(net_id, lp, payload_sz);
 
     return;
@@ -722,7 +776,6 @@ static void handle_restart_rev_event(
     ns->start_ts = m->start_ts;
     ns->msg_sent_count = num_reqs;
     ns->msg_recvd_count = num_reqs;
-    // TODO: Same question as in kickoff above...
     model_net_event_rc(net_id, lp, payload_sz);
 }
 

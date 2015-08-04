@@ -31,10 +31,12 @@ char Aspen_Mach_Path[100];      // Global for path and name of Aspen model
 char **Aspen_App_Path = NULL;        // Global array for paths and names of Aspen application/kernels
 char **Aspen_Socket = NULL;         // Global array for names of sockets to be used
 // TODO: Do something better than having a hard-coded length...
+char *network_traffic_type = NULL;      //Global variable to specify how destination servers should be found
 static int num_reqs = 0;/* number of requests sent by each server (read from config) */
 static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
 static int num_rounds = 0; /* number of computation-simulation rounds to perform (read from config) */
 static int debug_output = 0; /* flag for debug output. (read from config) */
+static int traffic_pattern_number = 0;
 
 /* model-net ID, can be either simple-net, dragonfly or torus (more will be
  * added) */
@@ -64,9 +66,18 @@ static char aspen_socket_key[] = "socket_choice000";
 /* The number of network-computation rounds to be performed in the
  * simulation (set from config file) */
 static char *num_rounds_key = "num_rounds";
+/* Static char for name of traffic type parameter: */
+static char traffic_type_key[] = "network_traffic_pattern";
 
 typedef struct svr_msg aspen_svr_msg;
 typedef struct svr_state aspen_svr_state;
+
+/* Types of network traffic patterns */
+typedef enum traffic_pattern_enum
+{
+    NEXTNEIGHBOR,   /* Default traffic pattern */
+    RANDOM          /* Random traffic pattern */
+};
 
 /* types of events that will constitute server activities */
 enum svr_event
@@ -138,7 +149,7 @@ tw_lptype svr_lp = {
     (pre_run_f) NULL,
     (event_f) aspen_svr_event,
     (revent_f) aspen_svr_rev_event,
-    (final_f)  aspen_svr_finalize,
+    (final_f)  NULL,//aspen_svr_finalize,
     (map_f) codes_mapping,
     sizeof(aspen_svr_state),
 };
@@ -225,7 +236,7 @@ static void handle_computation_rev_event(
 /* for this simulation, each server contacts its neighboring server in an id.
  * this function shows how to use the codes_mapping API to calculate IDs when
  * having to contend with multiple LP types and counts. */
-static tw_lpid get_next_server(tw_lpid sender_id);
+static tw_lpid get_next_server(tw_lp *lp);
 
 /* arguments to be handled by ROSS - strings passed in are expected to be
  * pre-allocated */
