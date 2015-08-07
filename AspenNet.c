@@ -119,7 +119,7 @@ int main(
     configuration_get_value_int(&aspen_config, param_group_nm, payload_sz_key, NULL, &payload_sz);
     /* Now, if this is the 0th MPI rank, read the Aspen configuration paths and filenames,
      * as well as the total number of simulation rounds to run. */
-    configuration_get_value(&aspen_config, param_group_nm, traffic_type_key, NULL, &network_traffic_type, 100); 
+    configuration_get_value(&aspen_config, aspen_group_nm, traffic_type_key, NULL, &network_traffic_type, 100); 
     if (g_tw_mynode == 0) 
     {
         int i, j, temp;
@@ -168,13 +168,13 @@ int main(
         // TODO: remove hard-coded length of 100!
         if (debug_output) 
         {
-            if (network_traffic_type)
+            if (network_traffic_type && network_traffic_type[0] != '\0')
             {
                 printf("INFO: Loaded network traffic type %s.\n", network_traffic_type);
             } else {
                 fprintf(stderr, "WARNING: No network traffic pattern loaded from conf file!\n"\
                        "Defaulting to nearest-neighbor.\n");
-                network_traffic_type = "nearest-neighbor";
+                memcpy(network_traffic_type, "nearest-neighbor", 16);
             }
             printf("INFO: Will execute %d network-computation rounds.\n", num_rounds);
             for (i = 0; i < num_rounds; i++)
@@ -188,7 +188,7 @@ int main(
     }
 
     /* Set traffic pattern number (global): */
-    if (network_traffic_type != NULL)
+    if (network_traffic_type && network_traffic_type[0] != '\0')
     {
         if (!strcmp(network_traffic_type, "nearest-neighbor"))
         {
@@ -219,8 +219,6 @@ int main(
                "kernel(s) is %f seconds.\n", totalRuntime);   
         if (debug_output) 
         {
-            /* model-net has the capability of outputting network transmission stats */
-            model_net_report_stats(net_id);
             printf("INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
             printf("INFO: Aspen computation was performed %u times.\n", roundsExecuted);
         }
@@ -371,7 +369,7 @@ static void aspen_svr_finalize(
     aspen_svr_state * ns,
     tw_lp * lp)
 {
-    if (debug_output) fprintf(stderr, "server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", \
+    if (debug_output) printf("server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", \
             (unsigned long long)(lp->gid/2),\
             payload_sz*ns->msg_recvd_count,\
             ns_to_s(ns->end_ts-ns->start_ts),\
@@ -415,7 +413,7 @@ tw_lpid get_next_server(tw_lp *lp)
             dest_rel_id = (codes_mapping_get_lp_relative_id(lp->gid, 0, 0) + 1) % num_servers;
             break;
         case RANDOM:
-            dest_rel_id = tw_rand_integer(lp->rng, 0, num_servers - 1);
+            dest_rel_id = tw_rand_integer(lp->rng, 0, num_servers - 2);
             if (dest_rel_id >= (codes_mapping_get_lp_relative_id(lp->gid, 0, 0)))
             {
                 dest_rel_id ++;
@@ -665,20 +663,20 @@ static void handle_computation_event(
 {
     // Non-master LPs should never receive or send this event, so exit if they do.
     assert(!g_tw_mynode && !lp->gid && m->src == lp->gid);
-    if (debug_output) printf("INFO: Master LP %lu is now performing Aspen Computation %d\n",\
+    printf("INFO: Master LP %lu is now performing Aspen Computation %d\n",\
                             lp->gid, roundsExecuted-computationRollbacks);
     /* Proceed with the computation: */
     m->incremented_flag = 0;
     totalRuntime += ns_to_s(ns->end_global - ns->start_global);
 
-    if (debug_output) printf("INFO: The network time elapsed is: %f ns\n\
-            The start and end values are: %f ns and %f ns\n",\
+    printf("\tINFO: The network time elapsed is: %f ns\n\
+            \tThe start and end values are: %f ns and %f ns\n",\
             (ns->end_global - ns->start_global), ns->start_global, ns->end_global);
 
     totalRuntime += runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
                                 Aspen_Mach_Path, Aspen_Socket[roundsExecuted - computationRollbacks]);
 
-    if (debug_output) printf("INFO: The final calculated runtime (up to this round) is %f seconds.\n",\
+    printf("\tINFO: The final calculated runtime (up to this round) is %f seconds.\n",\
                             totalRuntime);
     
     roundsExecuted ++;
@@ -728,28 +726,6 @@ static void handle_computation_event(
  * for more complex simulations, this will not be the case (e.g., state
  * containing queues) */
 
-static void handle_local_rev_event(
-	       aspen_svr_state * ns,
-	       tw_bf * b,
-	       aspen_svr_msg * m,
-	       tw_lp * lp)
-{
-   ns->local_recvd_count--;
-}
-/* reverse handler for req event */
-static void handle_req_rev_event(
-    aspen_svr_state * ns,
-    tw_bf * b,
-    aspen_svr_msg * m,
-    tw_lp * lp)
-{
-    ns->msg_recvd_count--;
-    /* model-net has its own reverse computation support */ 
-    model_net_event_rc(net_id, lp, payload_sz);
-    return;
-}
-
-
 /* reverse handler for kickoff */
 static void handle_kickoff_rev_event(
     aspen_svr_state * ns,
@@ -778,9 +754,6 @@ static void handle_restart_rev_event(
     aspen_svr_msg * m,
     tw_lp * lp)
 {
-    ns->start_ts = m->start_ts;
-    ns->msg_sent_count = num_reqs;
-    ns->msg_recvd_count = num_reqs;
     model_net_event_rc(net_id, lp, payload_sz);
     switch (traffic_pattern_number){
         case NEXTNEIGHBOR:
@@ -791,8 +764,19 @@ static void handle_restart_rev_event(
         default:
             break;
     }
+    ns->start_ts = m->start_ts;
+    ns->msg_sent_count = num_reqs;
+    ns->msg_recvd_count = num_reqs;
 }
 
+static void handle_local_rev_event(
+	       aspen_svr_state * ns,
+	       tw_bf * b,
+	       aspen_svr_msg * m,
+	       tw_lp * lp)
+{
+   ns->local_recvd_count--;
+}
 
 /* reverse handler for ack*/
 static void handle_ack_rev_event(
@@ -803,8 +787,8 @@ static void handle_ack_rev_event(
 {
     if(m->incremented_flag)
     {
-        model_net_event_rc(net_id, lp, payload_sz);
         ns->msg_sent_count--;
+        model_net_event_rc(net_id, lp, payload_sz);
     }
     else
     {
@@ -813,6 +797,20 @@ static void handle_ack_rev_event(
     }
     return;
 }
+
+/* reverse handler for req event */
+static void handle_req_rev_event(
+    aspen_svr_state * ns,
+    tw_bf * b,
+    aspen_svr_msg * m,
+    tw_lp * lp)
+{
+    /* model-net has its own reverse computation support */ 
+    model_net_event_rc(net_id, lp, payload_sz);
+    ns->msg_recvd_count--;
+    return;
+}
+
 
 /* reverse handler for data passing: */
 static void handle_data_rev_event(
@@ -850,7 +848,7 @@ static void handle_computation_rev_event(
 {
     assert(!lp->gid && !g_tw_mynode);
 
-    if (debug_output) printf("ROLLBACK: Performing reverse aspen computation.\n"\
+    printf("ROLLBACK: Performing reverse aspen computation.\n"\
             "\tCurrent value is: %f\n", totalRuntime);
 
     computationRollbacks ++;
@@ -860,10 +858,10 @@ static void handle_computation_rev_event(
     ns->data_recvd = num_servers; 
     if (totalRuntime < 0)
     {
-        if (debug_output) printf("\tWARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
+        fprintf(stderr, "\tWARNING: after rollback totalRuntime was less than zero. Setting to zero.\n");
         totalRuntime = 0;
     }
-    if (debug_output) printf("\tAfter rollback, runtime value is: %f\n", totalRuntime);
+    printf("\tAfter rollback, runtime value is: %f\n", totalRuntime);
     if (m->incremented_flag)
     {
         int i = 0;

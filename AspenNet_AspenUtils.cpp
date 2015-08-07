@@ -39,7 +39,7 @@ double runtimeCalc(char *a, char *m, char * socket)
         RuntimeCounter *t = new RuntimeCounter(app, mach, socket);
         t->SetCacheExecutionBlockExpressions(false);
         app->kernelMap["main"]->Traverse(t);
-        fprintf(stderr, "INFO: Returning Aspen result of %f.\n", t->GetResult());       
+        //fprintf(stderr, "INFO: Returning Aspen result of %f.\n", t->GetResult());       
         return t->GetResult();
         
     }
