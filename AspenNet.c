@@ -86,7 +86,8 @@ int main(
     }
     /* retreive debug_output flag from conf file */
     configuration_get_value_int(&aspen_config, aspen_group_nm, "debug_output", NULL, &debug_output);
-    if (debug_output && !g_tw_mynode) printf("\n*****DEBUG: WILL PRINT OUTPUT*****\n");
+    if (debug_output && !g_tw_mynode) printf("\n***** DEBUG LEVEL %d: WILL PRINT OUTPUT *****\n",
+                                             debug_output);
     /* register model-net LPs with ROSS */
     model_net_register();
 
@@ -369,7 +370,7 @@ static void aspen_svr_finalize(
     aspen_svr_state * ns,
     tw_lp * lp)
 {
-    if (debug_output) printf("server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", \
+    if (debug_output >= 2) printf("server %llu recvd %d bytes in %lf seconds, %lf MiB/s sent_count %d recvd_count %d local_count %d \n", \
             (unsigned long long)(lp->gid/2),\
             payload_sz*ns->msg_recvd_count,\
             ns_to_s(ns->end_ts-ns->start_ts),\
@@ -459,7 +460,7 @@ static void handle_kickoff_event(
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
      * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null)     */
     // TODO: see if the offset (0.000001) can be 0 or not.
-    model_net_event(net_id, "test", dest_id, payload_sz, 0.000001, sizeof(aspen_svr_msg),
+    model_net_event(net_id, "test", dest_id, payload_sz, 0, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     ns->msg_sent_count++;
 }
@@ -497,7 +498,7 @@ static void handle_restart_event(
     /* model-net needs to know about (1) higher-level destination LP which is a neighboring server in this case
      * (2) struct and size of remote message and (3) struct and size of local message (a local message can be null)     */
      // TODO: see if the offset (0.000001) can be 0 or not.
-    model_net_event(net_id, "test", dest_id, payload_sz, 0.000001, sizeof(aspen_svr_msg),
+    model_net_event(net_id, "test", dest_id, payload_sz, 0, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
 }
 
@@ -542,7 +543,7 @@ static void handle_ack_event(
 
         /* send another request */
 	 // TODO: see if the offset (0.000001) can be 0 or not.
-        model_net_event(net_id, "test", m->src, payload_sz, 0.000001, sizeof(aspen_svr_msg),
+        model_net_event(net_id, "test", m->src, payload_sz, 0, sizeof(aspen_svr_msg),
                 (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
         ns->msg_sent_count++; 
     }
@@ -598,7 +599,7 @@ static void handle_req_event(
     /* also trigger a local event for completion of payload msg */
     /* remote host will get an ack event */
     // TODO: see if the offset (0.000001) can be 0 or not.
-    model_net_event(net_id, "test", m->src, payload_sz, 0.000001, sizeof(aspen_svr_msg),
+    model_net_event(net_id, "test", m->src, payload_sz, 0, sizeof(aspen_svr_msg),
             (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     return;
 }
@@ -611,7 +612,7 @@ static void handle_data_event(
 {
     /* Make sure that the lp receiving this event is the 0 LP */
     assert(!lp->gid && !g_tw_mynode);
-    if (debug_output) printf("INFO: LP %lu received data event. (%u)\n", lp->gid, ns->data_recvd + 1);
+    if (debug_output >= 2) printf("INFO: LP %lu received data event. (%u)\n", lp->gid, ns->data_recvd + 1);
     if (m->start_ts < ns->start_global)
     {
         b->c0 = 1;
@@ -634,7 +635,7 @@ static void handle_data_event(
     // When the last one has been received, send a self message for aspen computation
     if (ns->data_recvd == num_servers)
     {
-        if (debug_output) printf("\tLP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
+        if (debug_output >= 2) printf("\tLP %lu has received the last timestamp pair. Preparing for Aspen Comp.\n",\
                 lp->gid);
         tw_event *e; 
         aspen_svr_msg *msg;
@@ -689,7 +690,7 @@ static void handle_computation_event(
     ns->data_recvd = 0;
     if (roundsExecuted < num_rounds + computationRollbacks)
     {
-        if (debug_output) printf("INFO: sending restart messages to LPs now!\n");
+        if (debug_output >= 2) printf("INFO: sending restart messages to LPs now!\n");
         m->incremented_flag = 1;
         /* There are more rounds to simulate, so send kickoffs to all LPs
          * Note that current_lpid is a relative lp id */
@@ -720,7 +721,7 @@ static void handle_computation_event(
             msg->src = lp->gid;
             /* event is ready to be processed, send it off */
             tw_event_send(e);
-            if (debug_output) printf("INFO: Sent restart to lp %lu.\n", global_id);
+            if (debug_output >= 2) printf("INFO: Sent restart to lp %lu.\n", global_id);
         }
     }
     return;
@@ -828,7 +829,7 @@ static void handle_data_rev_event(
     /* There's really not much to do here...just roll back to the \
      * previous start and end times and decrement the data_recvd counter. */
     assert(!lp->gid && !g_tw_mynode);
-    if (debug_output) printf("ROLLBACK: reversing data event. (%u)\n", ns->data_recvd - 1);
+    if (debug_output >=2) printf("ROLLBACK: reversing data event. (%u)\n", ns->data_recvd - 1);
     if (b->c0)
     {
         swap_start(ns, m);
@@ -840,7 +841,7 @@ static void handle_data_rev_event(
     ns->data_recvd --;
     if (ns->data_recvd == 0)
     {
-        if (debug_output) printf("\tAll data events have been reversed.\n");
+        if (debug_output >= 2) printf("\tAll data events have been reversed.\n");
     }
     return;
 }
