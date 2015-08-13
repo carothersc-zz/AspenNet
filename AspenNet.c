@@ -37,7 +37,10 @@ tw_stime totalRuntime = 0;
 /* Global value to specifically keep track of ASPENCOMP rollbacks */
 unsigned int computationRollbacks = 0; 
 /* Global value to keep track of the # of network-computation rounds performed */
-unsigned int roundsExecuted = 0;  
+unsigned int roundsExecuted = 0; 
+/* Globals for keeping track of the total number of rollbacks that occur in the simulation (only concerning Aspen LPs) */
+unsigned long int total_rank_rollbacks = 0;
+unsigned long int total_rollbacks = 0;
 
 /* Main function:
  * handles getting configuration options from config file and setup of ROSS/CODES 
@@ -214,6 +217,9 @@ int main(
     /* begin simulation */ 
     tw_run();
 
+    MPI_Reduce(&total_rank_rollbacks, &total_rollbacks, 1, MPI_UNSIGNED_LONG,\
+               MPI_SUM, 0, MPI_COMM_WORLD);
+
     if (g_tw_mynode == 0)
     {
         printf("\nFINAL REPORT: The final runtime for the application "\
@@ -222,6 +228,7 @@ int main(
         {
             printf("INFO: Aspen computation was rolled back %u times.\n", computationRollbacks);
             printf("INFO: Aspen computation was performed %u times.\n", roundsExecuted);
+            printf("INFO: Aspen LPs were rolled back a total of %lu times.\n", total_rollbacks);
         }
         /* Sanity check for optimized scheduler runs: */
         if (roundsExecuted != num_rounds + computationRollbacks)
@@ -333,6 +340,7 @@ static void aspen_svr_rev_event(
     aspen_svr_msg * m,
     tw_lp * lp)
 {
+    total_rank_rollbacks++;
     switch (m->aspen_svr_event_type)
     {
         case REQ:
