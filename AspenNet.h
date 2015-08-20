@@ -18,57 +18,6 @@
 #include <ross.h>
 #include <codes/configuration.h>
 
-/* Global variables for the aspen config file (ROSS/network config handle is
- * a global preallocated by configuration.c */
-ConfigHandle aspen_config;
-
-// NOTE: the aspen config file should contain the paths to the aspen kernel model(s)
-// and hardware model, as well as the socket on which the kernel model should be
-// evaluated.
-
-static int socket;     // Global int for the socket to be used (perhaps this should be configure in the conf file?)
-char Aspen_Mach_Path[100];      // Global for path and name of Aspen model
-char **Aspen_App_Path = NULL;        // Global array for paths and names of Aspen application/kernels
-char **Aspen_Socket = NULL;         // Global array for names of sockets to be used
-// TODO: Do something better than having a hard-coded length...
-char network_traffic_type[100];      //Global variable to specify how destination servers should be found
-static int num_reqs = 0;/* number of requests sent by each server (read from config) */
-static int payload_sz = 0; /* size of simulated data payload, bytes (read from config) */
-static int num_rounds = 0; /* number of computation-simulation rounds to perform (read from config) */
-static int debug_output = 0; /* flag for debug output. (read from config) */
-static int traffic_pattern_number = 0;
-
-/* model-net ID, can be either simple-net, dragonfly or torus (more will be
- * added) */
-static int net_id = 0;
-static int num_servers = 0;
-static int offset = 2;
-static int ttl_lps = 0;
-
-/* Expected key for ROSS/network config file */
-static char *network_conf_key = "network_conf_file";
-/* Expected LP group name in configure files for this program */
-static char *group_name = "ASPEN_SERVERS";
-/* Expected parameter group name for rounds of communication */
-static char *param_group_nm = "server_pings";
-/* Expected misc parameters group name */
-static char *misc_param_gp_nm = "PARAMS";
-/* Expected name of conf group for Aspen file path parameters */
-static char *aspen_group_nm = "ASPEN_PARAMS";
-/* Number of network requests to be sent by each LP per round */
-static char *num_reqs_key = "num_reqs";
-/* The size of each message's payload (in KB) */
-static char *payload_sz_key = "payload_sz";
-/* Template names for aspen file path keys and socket choices: */
-static char aspen_app_key[] = "aspen_app_path000";
-static char *aspen_mach_key = "aspen_mach_path";
-static char aspen_socket_key[] = "socket_choice000";
-/* The number of network-computation rounds to be performed in the
- * simulation (set from config file) */
-static char *num_rounds_key = "num_rounds";
-/* Static char for name of traffic type parameter: */
-static char *traffic_type_key = "network_traffic_pattern";
-
 typedef struct svr_msg aspen_svr_msg;
 typedef struct svr_state aspen_svr_state;
 
