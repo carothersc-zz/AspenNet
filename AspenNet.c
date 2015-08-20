@@ -81,7 +81,7 @@ static char aspen_socket_key[] = "socket_choice000";
 static char *num_rounds_key = "num_rounds";
 /* Static char for name of traffic type parameter: */
 static char *traffic_type_key = "network_traffic_pattern";
-static char aspen_svr_name = "nw-lp";
+static char *aspen_svr_name = "server";
 
 /* Global value to keep track of total runtime */
 tw_stime totalRuntime = 0;

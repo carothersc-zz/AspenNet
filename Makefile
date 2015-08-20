@@ -23,19 +23,19 @@ LDLIBS = -laspen -lcodes-net -lcodes-base $(shell $(ROSS)/bin/ross-config --libs
 # Actual compilation directions:
 
 AspenNet_AspenUtils.o: AspenNet_AspenUtils.cpp
-	mpic++ -g $(CPPFLAGS) -c -O3 AspenNet_AspenUtils.cpp -o AspenNet_AspenUtils.o
+	mpic++ $(CPPFLAGS) -c -O3 AspenNet_AspenUtils.cpp -o AspenNet_AspenUtils.o
 
 AspenNet.o: AspenNet.c
-	$(CC) -g $(CPPFLAGS) -c -O3 AspenNet.c -o AspenNet.o
+	$(CC) $(CPPFLAGS) -c -O3 AspenNet.c -o AspenNet.o
 
 test.o: test.c
-	$(CC) -g $(CPPFLAGS) -c -O3 test.c -o test.o
+	$(CC) $(CPPFLAGS) -c -O3 test.c -o test.o
 
 AspenNet: AspenNet.o AspenNet_AspenUtils.o
-	mpic++ -g $(CPPFLAGS)  AspenNet.o AspenNet_AspenUtils.o  $(LDFLAGS) $(LDLIBS) -o AspenNet
+	mpic++ $(CPPFLAGS)  AspenNet.o AspenNet_AspenUtils.o  $(LDFLAGS) $(LDLIBS) -o AspenNet
 
 testfile: test.o AspenNet_AspenUtils.o
-	mpic++ -g $(CPPFLAGS) -O3 test.o AspenNet_AspenUtils.o $(LDFLAGS) $(LDLIBS) -o test
+	mpic++ $(CPPFLAGS) -O3 test.o AspenNet_AspenUtils.o $(LDFLAGS) $(LDLIBS) -o test
 
 clean:   
 	rm -f *.o
