@@ -9,35 +9,34 @@
 #include "codes/model-net.h"
 #include "codes/lp-type-lookup.h"
 #include "codes/local-storage-model.h"
-
-// Prototypes for extern C functions:
-extern double runtimeCalc(char *a, char *m, char * socket);
-extern int getSockets(char *m, char*** buf);
-
+#include "aspenc.h"
 
 int main(){
     int i;
     char **buf = NULL;
     int size = -1;
-    char* app = "./models/fft/1D_FFT.aspen";
-    char* machine = "./models/machine/BigTestRig.aspen";
-    printf("%e\n", runtimeCalc(app, machine, "amd_HD5770"));
+    char* app = "./models/matmul/matmul.aspen";
+    char* machine = "./models/machine/simple.aspen";
+    
+    AppModel_p app_model = Aspen_LoadAppModel(app);
+    printf("Loaded model: %s\n", AppModel_GetName(app_model));
+    
+    Kernel_p kernel = AppModel_GetMainKernel(app_model);
+    printf("Main kernel is: %s\n", Kernel_GetName(kernel));
 
-    size = getSockets(machine,  &buf);
+    MachModel_p mach_model = Aspen_LoadMachModel(machine);
+    MachComponent_p mach = MachModel_GetMachine(mach_model);
+    printf("Machine Model: %s\n", MachComponent_GetName(mach));
 
-    if (size == -1){
-        fprintf(stderr, "ERROR: No int was stored!\n");
-    }
-    else {
-        printf("%d sockets should be returned.\n", size);
-        if (!buf){
-            fprintf(stderr, "ERROR: No sockets were returned!\n");
-        }
-        else {
-            for (i = 0; i < size; i++){
-                printf("%s\n", buf[i]);
-            }
-        }   
-    }
+    Expression_p runtime_expr = Kernel_GetTimeExpression(kernel, app_model, mach_model, "SimpleCPU");
+    ParamMap_p appParams = AppModel_GetParamMap(app_model);
+    ParamMap_p machParams = MachModel_GetParamMap(mach_model);
+
+    Expression_p rt_exp1 = Expression_Expanded(runtime_expr, ParamMap_Create("n", 277));
+    // Above: "Runtime expanded by n = 277"
+    Expression_p rt_exp2 = Expression_Expanded(Expression_Expanded(rt_exp1, appParams), machParams);
+
+    printf("Expression as value: %lf\n", Expression_Evaluate(rt_exp2));
+
     return 0;
 }
