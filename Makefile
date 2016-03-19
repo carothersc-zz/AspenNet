@@ -25,13 +25,13 @@ AspenNet.o: AspenNet.c
 	$(CC) $(CPPFLAGS) -g -c AspenNet.c -o AspenNet.o
 
 test: test.o
-	mpic++  -o test test.o $(LDFLAGS) $(LDLIBS)
+	mpic++ -o test test.o $(LDFLAGS) $(LDLIBS)
 	
 test.o:
-	$(CC) -fPIC -g $(CPPFLAGS) -c test.c -o test.o
+	$(CC) -g $(CPPFLAGS) -c test.c -o test.o
 
 AspenNet: AspenNet.o
-	mpic++ $(CPPFLAGS) -g  AspenNet.o AspenNet_AspenUtils.o  $(LDFLAGS) $(LDLIBS) -o AspenNet
+	mpic++ $(CPPFLAGS) -g -o AspenNet AspenNet.o $(LDFLAGS) $(LDLIBS)
 
 testfile: test.o
 	$(CC) $(CPPFLAGS) -g test.o $(LDFLAGS) $(LDLIBS) -o test

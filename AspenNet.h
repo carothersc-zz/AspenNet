@@ -68,6 +68,9 @@ struct svr_msg
     tw_stime end_ts;      /* storage of end time for data */
 };
 
+// Aspen runtimeCalc function declaration:
+double runtimeCalc(char * app, char * machine, char * socket);
+
 /* ROSS expects four functions per LP:
  * - an LP initialization function, called for each LP
  * - an event processing function

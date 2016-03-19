@@ -22,6 +22,8 @@
 #include "codes/lp-type-lookup.h"
 #include "codes/local-storage-model.h"
 
+#include "aspenc.h"
+
 #include "AspenNet.h"
 
 /* Global variable for the aspen config file (ROSS/network config handle is
@@ -37,7 +39,6 @@ char Aspen_Mach_Path[100];
 char **Aspen_App_Path = NULL;
 /* Global array for names of sockets to be used */
 char **Aspen_Socket = NULL;
-// TODO: Do something better than having a hard-coded length...
 /* Global variables to specify how destination servers should be found */
 char network_traffic_type[100];
 static int traffic_pattern_number = 0;
@@ -96,8 +97,8 @@ unsigned int roundsExecuted = 0;
  *  which contains the function definitions. AspenNet_AspenUtils.cpp
  *  #includes several Aspen source files from which its functionality
  *  is derived. */
-extern double runtimeCalc(char *a, char *m, char * socket);
-extern int getSockets(char *m, char*** buf);
+//extern double runtimeCalc(char *a, char *m, char * socket);
+//extern int getSockets(char *m, char*** buf);
 
 /* Main function:
  * handles getting configuration options from config file and setup of ROSS/CODES
@@ -671,7 +672,6 @@ static void handle_req_event(
     /* simulated payload of 4 MiB */
     /* also trigger a local event for completion of payload msg */
     /* remote host will get an ack event */
-    // TODO: see if the offset (0.000001) can be 0 or not.
     model_net_event(net_id, "test", m->src, payload_sz, 0, sizeof(aspen_svr_msg),\
                     (const void*)&m_remote, sizeof(aspen_svr_msg), (const void*)&m_local, lp);
     return;
@@ -755,6 +755,7 @@ static void handle_computation_event(
            "\tThe start and end values are: %f ns and %f ns\n",\
            delta, ns->start_global, ns->end_global);
     
+    //TODO: FIX THIS
     delta += runtimeCalc(Aspen_App_Path[roundsExecuted - computationRollbacks],\
                          Aspen_Mach_Path, Aspen_Socket[roundsExecuted - computationRollbacks]);
     
@@ -963,6 +964,38 @@ static void handle_computation_rev_event(
     return;
 }
 
+double runtimeCalc(char * app, char * machine, char * socket){
+    char **buf = NULL;
+    // char* app = "./models/matmul/matmul.aspen";
+    // char* machine = "./models/machine/simple.aspen";
+    
+    AppModel_p app_model = Aspen_LoadAppModel(app);
+    printf("Loaded model: %s\n", AppModel_GetName(app_model));
+    
+    Kernel_p kernel = AppModel_GetMainKernel(app_model);
+    printf("Main kernel is: %s\n", Kernel_GetName(kernel));
+
+    MachModel_p mach_model = Aspen_LoadMachModel(machine);
+    MachComponent_p mach = MachModel_GetMachine(mach_model);
+    printf("Machine Model: %s\n", MachComponent_GetName(mach));
+    
+    printf("Using Socket: %s\n", socket);
+        
+    Expression_p runtime_expr = Kernel_GetTimeExpression(kernel, app_model, mach_model, socket);
+    ParamMap_p appParams = AppModel_GetParamMap(app_model);
+    ParamMap_p machParams = MachModel_GetParamMap(mach_model);
+    
+    // TODO: The param thing below is stolen from the c API example in the Aspen source.
+    // Perhaps we can get rid of this? I'm not entirely sure of its effect with various kernels...
+    Expression_p rt_exp1 = Expression_Expanded(runtime_expr, ParamMap_Create("n", 277));
+    // Above: "Runtime expanded by n = 277"
+    Expression_p rt_exp2 = Expression_Expanded(Expression_Expanded(rt_exp1, appParams), machParams);
+    
+    double value = Expression_Evaluate(rt_exp2);
+    printf("Expression as value: %lf\n", value);
+
+    return value; 
+}
 
 /*
  * Local variables:
